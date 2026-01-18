@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Data Engineering Zoomcamp - Homework & Learning
 
 This repository contains my personal journey, exercises, and homework solutions for the [Data Engineering Zoomcamp](https://github.com/DataTalksClub/data-engineering-zoomcamp) program.
@@ -48,3 +49,7 @@ Each module folder contains specific instructions. In general, to run the enviro
 
 ---
 *Note: This repository is intended for educational purposes and documenting progress within the DataTalks.Club community.*
+=======
+# de_zoomcamp_2026_homework
+Repo for Homework on DE Zoomcamp 2026
+>>>>>>> 019db0a31da5922e43e9e9f330c5dd8e01b51b8b
