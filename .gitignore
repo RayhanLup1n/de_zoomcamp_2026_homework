@@ -1,0 +1,21 @@
+# Ignore everything in the root
+/*
+
+# Allow the homework folder
+!01-docker-sql-terraform-gcp-homework/
+
+# Allow .gitignore itself
+!.gitignore
+
+# Allow README.md (optional, but usually good to keep)
+!README.md
+
+# --- Standard ignores for inside allowed folders ---
+# These will still work for the un-ignored 01-docker-sql-terraform-gcp-homework folder
+**/__pycache__/
+**/*.py[oc]
+**/*.parquet
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.backup
+**/.terraform.lock.hcl
