@@ -4,13 +4,13 @@ This repository contains my personal journey, exercises, and homework solutions 
 
 ## 🚀 Repository Structure
 
-The focus of this repository is to document the progress of the course modules and provide clear solutions to the weekly homework.
+This repository is organized into two main sections:
 
-*   **[Module 1: Containerization and Infrastructure as Code](./01-docker-sql-terraform-gcp-homework/)**
-    *   Docker & Docker Compose (PostgreSQL, pgAdmin)
-    *   SQL Refresher with NYC Taxi Data
-    *   Infrastructure as Code with Terraform (GCP)
-    *   In-depth Documentation/Q&A for Homework 1
+*   **[📁 learn/](./learn/)**: Contains all the learning materials, notes, and exercises followed during the course modules.
+    *   Docker, SQL, Terraform, and GCP setup.
+*   **[📁 homework/](./homework/)**: Contains my official solutions to the weekly assignments.
+    *   [Module 1 Homework](./homework/01-docker-sql-terraform-gcp-homework/)
+
 
 ## 🛠️ Tech Stack & Tools
 
