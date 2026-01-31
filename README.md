@@ -8,37 +8,42 @@ This repository is organized into two main sections:
 
 *   **[📁 learn/](./learn/)**: Contains all the learning materials, notes, and exercises followed during the course modules.
     *   Docker, SQL, Terraform, and GCP setup.
+    *   Workflow Orchestration with Kestra.
 *   **[📁 homework/](./homework/)**: Contains my official solutions to the weekly assignments.
     *   [Module 1 Homework](./homework/01-docker-sql-terraform-gcp-homework/)
+    *   [Module 2 Homework](./homework/02-workflow-orchestration-homework/)
 
 
 ## 🛠️ Tech Stack & Tools
 
 *   **Infrastructure**: Google Cloud Platform (GCP)
+*   **Orchestration**: Kestra
 *   **IaC**: Terraform
 *   **Containerization**: Docker & Docker Compose
 *   **Programming**: Python 3.13 (Managed by [uv](https://github.com/astral-sh/uv))
 *   **Database**: PostgreSQL
+*   **Analytical DB**: DuckDB
 *   **Management Tools**: pgAdmin, pgcli
 
 ## 📝 Running the Solutions
 
 Each module folder contains specific instructions. In general, to run the environments locally:
 
-1.  **Clone the repo**:
+### Module 1: Docker & SQL
+1.  **Spin up the database environment**:
     ```bash
-    git clone <your-repo-url>
-    ```
-2.  **Spin up the database environment**:
-    ```bash
-    cd 01-docker-sql-terraform-gcp-homework
+    cd learn/01-docker-xml
     docker-compose up -d
     ```
-3.  **Run ingestion tasks**:
+
+### Module 2: Workflow Orchestration (Kestra)
+1.  **Spin up Kestra & Postgres**:
     ```bash
-    # Using uv for fast execution
-    uv run python question_3.py --url <dataset_url>
+    cd learn/02-workflow-orchestration
+    docker-compose up -d
     ```
+2.  **Access Kestra UI**: Open [http://localhost:8080](http://localhost:8080) in your browser.
+
 
 ## 👨‍💻 Author
 
