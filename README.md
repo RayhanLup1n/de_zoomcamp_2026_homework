@@ -12,6 +12,7 @@ This repository is organized into two main sections:
 *   **[📁 homework/](./homework/)**: Contains my official solutions to the weekly assignments.
     *   [Module 1 Homework](./homework/01-docker-sql-terraform-gcp-homework/)
     *   [Module 2 Homework](./homework/02-workflow-orchestration-homework/)
+    *   [Module 3 Homework](./homework/03-data-warehouse/)
 
 
 ## 🛠️ Tech Stack & Tools
@@ -19,6 +20,7 @@ This repository is organized into two main sections:
 *   **Infrastructure**: Google Cloud Platform (GCP)
 *   **Orchestration**: Kestra
 *   **IaC**: Terraform
+*   **Data Warehouse**: BigQuery
 *   **Containerization**: Docker & Docker Compose
 *   **Programming**: Python 3.13 (Managed by [uv](https://github.com/astral-sh/uv))
 *   **Database**: PostgreSQL
@@ -43,6 +45,14 @@ Each module folder contains specific instructions. In general, to run the enviro
     docker-compose up -d
     ```
 2.  **Access Kestra UI**: Open [http://localhost:8080](http://localhost:8080) in your browser.
+
+### Module 3: Data Warehouse (BigQuery)
+1.  **Load data to GCS**:
+    ```bash
+    cd homework/03-data-warehouse
+    uv run load_yellow_taxi_data.py
+    ```
+2.  **Execute SQL Queries**: Use the queries in `module-3-queries.sql` within the BigQuery Console.
 
 
 ## 👨‍💻 Author
