@@ -5,6 +5,9 @@ learn/
 .venv/
 __pycache__/
 *.pyc
+.python-version
+pyproject.toml
+uv.lock
 
 # Terraform
 .terraform/
