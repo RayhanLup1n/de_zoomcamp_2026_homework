@@ -1,33 +1,29 @@
-# Question 7: First-Time Run
+# Question 7
 
 ## Task Explanation
 
-When running a pipeline for the first time on a new DuckDB database, you need to create tables from scratch. This question asks which flag to use.
+When running a pipeline for the first time on a new database, tables need to be created from scratch. This question asks for the correct flag.
 
-## Query Function
+### Query Function
 
-**Command:**
+**Command (bash):**
 ```bash
 bruin run . --full-refresh
 ```
 
 **Breakdown:**
-1. **`bruin run .`**: Run entire pipeline
-2. **`--full-refresh`**: Flag to create/replace tables from scratch
+1.  **`bruin run .`**: Run the entire pipeline
+2.  **`--full-refresh`**: Flag to create/replace tables from scratch
 
-## Multiple Choice Options
-
+**Multiple Choice Options:**
 - `--create`
 - `--init`
 - `--full-refresh`
 - `--truncate`
 
-## Answer
+**Answer:** **`--full-refresh`**
 
-**`--full-refresh`**
-
-## Reason
-
+**Reason:**
 - `--full-refresh` will truncate and rebuild tables from scratch
 - Suitable for first-time run or when wanting to refresh all data
 

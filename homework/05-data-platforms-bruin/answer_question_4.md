@@ -1,20 +1,20 @@
-# Question 4: Running with Dependencies
+# Question 4
 
 ## Task Explanation
 
 After modifying `ingestion/trips.py`, you want to run it plus all downstream assets. This question asks for the correct command.
 
-## Query Function
+### Query Function
 
-**Command:**
+**Command (bash):**
 ```bash
 bruin run --select ingestion.trips+
 ```
 
 **Breakdown:**
-1. **`--select`**: Flag to select specific asset
-2. **`ingestion.trips`**: Asset name (dot notation)
-3. **`+`**: Include all downstream dependencies
+1.  **`--select`**: Flag to select specific asset
+2.  **`ingestion.trips`**: Asset name (dot notation)
+3.  **`+`**: Include all downstream dependencies
 
 **Dependency Graph Example:**
 ```
@@ -27,30 +27,15 @@ staging.trips
 reports.trips_report
 ```
 
-## Multiple Choice Options
-
+**Multiple Choice Options:**
 - `bruin run ingestion.trips --all`
 - `bruin run ingestion/trips.py --downstream`
 - `bruin run pipeline/trips.py --recursive`
 - `bruin run --select ingestion.trips+`
 
-## Answer
+**Answer:** **`bruin run --select ingestion.trips+`**
 
-**`bruin run --select ingestion.trips+`**
-
-## Reason
-
+**Reason:**
 - `--select` with `+` notation is the official way to run asset + downstream
 - `ingestion.trips` uses dot notation (asset path with dots)
 - `+` means include all downstream dependencies
-
-If you run `bruin run --select ingestion.trips+`, all assets from `ingestion.trips` downwards will be executed.
-
-**Available Commands:**
-
-| Command | Purpose |
-|---------|---------|
-| `bruin run <asset>` | Run single asset |
-| `bruin run <asset> --downstream` | Run asset + downstream |
-| `bruin run --select asset+` | Run asset + downstream (select syntax) |
-| `bruin run --select asset+@<n>` | Run asset + n levels downstream |
