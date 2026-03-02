@@ -12,9 +12,10 @@ This repository contains my personal journey, exercises, and homework solutions 
 | 2 | Workflow Orchestration (Kestra) | ✅ Completed | [Link](./homework/02-workflow-orchestration-homework/) |
 | 3 | Data Warehouse (BigQuery) | ✅ Completed | [Link](./homework/03-data-warehouse/) |
 | 4 | Analytics Engineering (dbt) | ✅ Completed | [Link](./homework/04-analytics-engineering/) |
-| 5 | Data Platforms (Bruin) | 🔄 In Progress | [Link](./homework/05-data-platforms-bruin/) |
-| 6 | Batch Processing (PySpark) | 📝 Notes Added | [Link](./learn/05-batch-pyspark/) |
-| 7 | Streaming (Kafka/PyFlink) | ⏳ Pending | - |
+| 5 | Data Platforms (Bruin) | ✅ Completed | [Link](./homework/05-data-platforms-bruin/) |
+| 6 | Batch Processing (PySpark) | ✅ Completed | [Link](./homework/06-batch-pyspark/) |
+| WS | Workshop 1: DLT Ingestion | ✅ Completed | [Link](./workshop/01-dlt-workshop/) |
+| 7 | Streaming (Kafka/PyFlink) | ⏳ Next | - |
 | 8-9 | Projects | ⏳ Pending | - |
 
 ---
@@ -29,19 +30,25 @@ builder_rayhanAnanda/
 │   ├── 02-workflow-orchestration-homework/
 │   ├── 03-data-warehouse/
 │   ├── 04-analytics-engineering/
-│   ├── 05-data-platforms-bruin/  # Module 5: Bruin
-│   └── 05-batch-pyspark/         # PySpark homework (bonus)
+│   ├── 05-data-platforms-bruin/
+│   └── 06-batch-pyspark/
+│
+├── workshop/                    # Workshop solutions
+│   └── 01-dlt-workshop/         # DLT Ingestion Workshop
 │
 ├── learn/                       # Learning notes & materials
 │   ├── 01-docker-sql-terraform/
 │   ├── 02-workflow-orchestration/
 │   ├── 03-data-warehouse/
 │   ├── 04-analytics-engineering/
-│   ├── 05-batch-pyspark/         # PySpark notes
-│   └── 06-data-platform-bruin/   # Bruin notes
+│   ├── 05-batch-pyspark/
+│   └── 06-data-platform-bruin/
 │
-├── docs/                        # Session documentation (gitignored)
-│   └── 2026-02-24-module-5-bruin.md
+├── docs/                        # Session documentation
+│   ├── overview.md
+│   ├── 2026-02-24-module-5-bruin.md
+│   ├── 2026-03-02-module-6-pyspark.md
+│   └── 2026-03-02-workshop-dlt.md
 │
 └── .venv/                       # Virtual environment (uv)
 ```
@@ -54,7 +61,7 @@ builder_rayhanAnanda/
 |----------|-------|
 | **Infrastructure** | Google Cloud Platform (GCP) |
 | **Orchestration** | Kestra, Bruin |
-| **Data Platform** | Bruin (unified data pipeline) |
+| **Data Ingestion** | dlt, Bruin/ingestr |
 | **Batch Processing** | PySpark, Apache Spark |
 | **Data Warehouse** | BigQuery, DuckDB |
 | **Transformation** | dbt, SQL |
@@ -89,20 +96,25 @@ builder_rayhanAnanda/
 - Models, seeds, and tests
 - Documentation and lineage
 
-### Module 5: Data Platforms (Bruin) 🔄
+### Module 5: Data Platforms (Bruin)
 - Unified data pipeline framework
 - Data ingestion with ingestr
 - SQL/Python transformation
 - Data quality checks
 - Pipeline orchestration
-- **Status**: In Progress
 
-### Module 6: Batch Processing (PySpark) 📝
+### Module 6: Batch Processing (PySpark)
 - Spark architecture and fundamentals
 - PySpark DataFrame operations
 - Batch processing patterns
 - Spark UI for monitoring
-- **Status**: Notes Added (bonus learning)
+
+### Workshop 1: DLT Ingestion
+- dlt (Data Loading Tool) fundamentals
+- REST API data sources with pagination
+- Schema inference and normalization
+- DuckDB as local data warehouse
+- AI-assisted pipeline building
 
 ---
 
@@ -145,9 +157,19 @@ bruin run . --full-refresh
 
 ### Module 6: Batch Processing (PySpark)
 ```bash
-cd learn/05-batch-pyspark
+cd learn/06-batch-pyspark
 source .venv/bin/activate
-python homework5.py
+python homework6_nov2025.py
+```
+
+### Workshop 1: DLT Ingestion
+```bash
+cd workshop/01-dlt-workshop
+uv pip install "dlt[duckdb]"
+uv run python taxi_pipeline.py
+
+# View pipeline dashboard
+dlt pipeline taxi_pipeline show
 ```
 
 ---
@@ -158,6 +180,7 @@ python homework5.py
 - **Community**: [DataTalks.Club](https://datatalks.club/)
 - **Bruin Docs**: [https://getbruin.com/docs](https://getbruin.com/docs)
 - **Kestra Docs**: [https://kestra.io/docs](https://kestra.io/docs)
+- **dlt Docs**: [https://dlthub.com/docs](https://dlthub.com/docs)
 
 ---
 
