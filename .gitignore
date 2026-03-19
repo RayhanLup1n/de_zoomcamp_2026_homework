@@ -30,6 +30,7 @@ override.tf.json
 *.csv
 *.csv.gz
 *.zip
+*.crc
 
 # OS
 .DS_Store
