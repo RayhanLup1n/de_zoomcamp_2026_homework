@@ -14,8 +14,8 @@ This repository contains my personal journey, exercises, and homework solutions 
 | 4 | Analytics Engineering (dbt) | ✅ Completed | [Link](./homework/04-analytics-engineering/) |
 | 5 | Data Platforms (Bruin) | ✅ Completed | [Link](./homework/05-data-platforms-bruin/) |
 | 6 | Batch Processing (PySpark) | ✅ Completed | [Link](./homework/06-batch-pyspark/) |
+| 7 | Streaming (Kafka/PyFlink) | ✅ Completed | [Link](./homework/07-streaming/) |
 | WS | Workshop 1: DLT Ingestion | ✅ Completed | [Link](./workshop/01-dlt-workshop/) |
-| 7 | Streaming (Kafka/PyFlink) | ⏳ Next | - |
 | 8-9 | Projects | ⏳ Pending | - |
 
 ---
@@ -31,7 +31,8 @@ builder_rayhanAnanda/
 │   ├── 03-data-warehouse/
 │   ├── 04-analytics-engineering/
 │   ├── 05-data-platforms-bruin/
-│   └── 06-batch-pyspark/
+│   ├── 06-batch-pyspark/
+│   └── 07-streaming/             # Kafka/PyFlink streaming
 │
 ├── workshop/                    # Workshop solutions
 │   └── 01-dlt-workshop/         # DLT Ingestion Workshop
@@ -48,7 +49,8 @@ builder_rayhanAnanda/
 │   ├── overview.md
 │   ├── 2026-02-24-module-5-bruin.md
 │   ├── 2026-03-02-module-6-pyspark.md
-│   └── 2026-03-02-workshop-dlt.md
+│   ├── 2026-03-02-workshop-dlt.md
+│   └── module_07_streaming_homework.md
 │
 └── .venv/                       # Virtual environment (uv)
 ```
@@ -63,6 +65,7 @@ builder_rayhanAnanda/
 | **Orchestration** | Kestra, Bruin |
 | **Data Ingestion** | dlt, Bruin/ingestr |
 | **Batch Processing** | PySpark, Apache Spark |
+| **Stream Processing** | Kafka, Redpanda, PyFlink |
 | **Data Warehouse** | BigQuery, DuckDB |
 | **Transformation** | dbt, SQL |
 | **IaC** | Terraform |
@@ -108,6 +111,15 @@ builder_rayhanAnanda/
 - PySpark DataFrame operations
 - Batch processing patterns
 - Spark UI for monitoring
+
+### Module 7: Streaming (Kafka/PyFlink)
+- Kafka/Redpanda fundamentals
+- Producer and consumer patterns
+- Event streaming and message handling
+- PyFlink stream processing
+- Windowing (tumbling and session windows)
+- Watermark and event time processing
+- Real-time aggregations
 
 ### Workshop 1: DLT Ingestion
 - dlt (Data Loading Tool) fundamentals
@@ -172,6 +184,37 @@ uv run python taxi_pipeline.py
 dlt pipeline taxi_pipeline show
 ```
 
+### Module 7: Streaming (Kafka/PyFlink)
+```bash
+# Setup infrastructure
+cd ../../data-engineering-zoomcamp/07-streaming/workshop/
+docker-compose build
+docker-compose up -d
+
+# Redpanda UI: http://localhost:8082
+# Flink UI: http://localhost:8081
+# PostgreSQL: localhost:5432 (user: postgres, password: postgres)
+
+# Check Redpanda version
+docker exec -it workshop-redpanda-1 rpk version
+
+# Create Kafka topic
+docker exec -it workshop-redpanda-1 rpk topic create green-trips
+
+# Run producer
+cd ../../../builder_rayhanAnanda/homework/07-streaming/
+python producer_green_taxi.py
+
+# Run consumer
+python consumer_green_taxi.py
+
+# Run Flink job (copy job files to workshop/src/job/ first)
+docker exec -it workshop-jobmanager-1 flink run -py /opt/src/job/flink_job_tumbling_window.py
+
+# Query PostgreSQL
+docker exec -it workshop-postgres-1 psql -U postgres -d postgres -c "SELECT * FROM trips_per_location_5min;"
+```
+
 ---
 
 ## 📚 Learning Resources
@@ -181,6 +224,9 @@ dlt pipeline taxi_pipeline show
 - **Bruin Docs**: [https://getbruin.com/docs](https://getbruin.com/docs)
 - **Kestra Docs**: [https://kestra.io/docs](https://kestra.io/docs)
 - **dlt Docs**: [https://dlthub.com/docs](https://dlthub.com/docs)
+- **Kafka Docs**: [https://kafka.apache.org/documentation/](https://kafka.apache.org/documentation/)
+- **Redpanda Docs**: [https://docs.redpanda.com/](https://docs.redpanda.com/)
+- **PyFlink Docs**: [https://nightlies.apache.org/flink/flink-docs-release-1.17/docs/dev/python/table/](https://nightlies.apache.org/flink/flink-docs-release-1.17/docs/dev/python/table/)
 
 ---
 
