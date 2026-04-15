@@ -59,8 +59,17 @@ def get_duckdb_path():
 
 def is_cloud_mode() -> bool:
     """Check if we should use BigQuery (Cloud Mode)."""
-    project_id, creds_path = get_gcp_config()
-    return bool(project_id and creds_path and os.path.exists(creds_path))
+    project_id = os.environ.get("GCP_PROJECT_ID")
+    if not project_id:
+        return False
+    
+    # On Cloud Run, ADC is available automatically via the service identity
+    if os.environ.get("K_SERVICE"):
+        return True
+    
+    # Local development: check for explicit credentials file
+    _, creds_path = get_gcp_config()
+    return bool(creds_path and os.path.exists(creds_path))
 
 
 @st.cache_resource
@@ -70,6 +79,12 @@ def get_bigquery_client():
         return None
     
     project_id, creds_path = get_gcp_config()
+    
+    # On Cloud Run: use Application Default Credentials (no file needed)
+    if os.environ.get("K_SERVICE") or not creds_path or not os.path.exists(creds_path):
+        return bigquery.Client(project=project_id)
+    
+    # Local development: use explicit credentials file
     credentials = service_account.Credentials.from_service_account_file(creds_path)
     return bigquery.Client(credentials=credentials, project=project_id)
 
