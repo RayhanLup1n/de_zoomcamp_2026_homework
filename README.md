@@ -16,7 +16,7 @@ This repository contains my personal journey, exercises, and homework solutions 
 | 6 | Batch Processing (PySpark) | ✅ Completed | [Link](./homework/06-batch-pyspark/) |
 | 7 | Streaming (Kafka/PyFlink) | ✅ Completed | [Link](./homework/07-streaming/) |
 | WS | Workshop 1: DLT Ingestion | ✅ Completed | [Link](./workshop/01-dlt-workshop/) |
-| 8-9 | Projects | ⏳ Pending | - |
+| 8-9 | Capstone Project | ✅ Completed | [Link](./project/) |
 
 ---
 
@@ -37,13 +37,23 @@ builder_rayhanAnanda/
 ├── workshop/                    # Workshop solutions
 │   └── 01-dlt-workshop/         # DLT Ingestion Workshop
 │
+├── project/                     # Capstone Project - NYC Taxi Analytics
+│   ├── README.md                # Detailed project documentation
+│   ├── docker-compose.yml       # Multi-service orchestration
+│   ├── dashboard/               # Streamlit dashboard
+│   ├── dbt/                     # dbt transformations
+│   ├── ingestion/               # dlt data ingestion
+│   ├── kestra/                  # Workflow orchestration
+│   ├── terraform/               # Infrastructure as Code
+│   └── data/                    # DuckDB database
+│
 ├── learn/                       # Learning notes & materials
 │   ├── 01-docker-sql-terraform/
 │   ├── 02-workflow-orchestration/
 │   ├── 03-data-warehouse/
 │   ├── 04-analytics-engineering/
 │   ├── 05-batch-pyspark/
-│   └── 06-data-platform-bruin/
+│   └── 06-batch-pyspark/
 │
 ├── docs/                        # Session documentation
 │   ├── overview.md
@@ -127,6 +137,13 @@ builder_rayhanAnanda/
 - Schema inference and normalization
 - DuckDB as local data warehouse
 - AI-assisted pipeline building
+
+### Capstone Project: NYC Taxi Analytics Dashboard
+- End-to-end data pipeline from ingestion to visualization
+- Tech stack: dlt (ingestion) + DuckDB (warehouse) + dbt (transformation) + Streamlit (dashboard)
+- Docker Compose for local deployment
+- NYC TLC taxi trip data analysis (1.2M+ trips)
+- Interactive dashboard with payment type and hourly trip patterns
 
 ---
 
@@ -240,3 +257,14 @@ docker exec -it workshop-postgres-1 psql -U postgres -d postgres -c "SELECT * FR
 ---
 
 *Note: This repository is intended for educational purposes and documenting progress within the DataTalks.Club community.*
+
+---
+
+## 🎓 Program Completion
+
+Data Engineering Zoomcamp 2026 — **Completed** ✅
+
+All modules, workshops, and the capstone project have been successfully completed.
+- 7 Core Modules
+- 1 Workshop (DLT Ingestion)
+- 1 Capstone Project (NYC Taxi Analytics)
