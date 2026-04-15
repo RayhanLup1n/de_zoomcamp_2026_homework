@@ -1,0 +1,179 @@
+id: nyc_taxi_pipeline
+namespace: de_zoomcamp
+description: >
+  NYC Taxi Analytics Pipeline.
+  Ingests taxi data, runs transformations, and validates with tests.
+
+labels:
+  project: "de-zoomcamp-capstone"
+  environment: "local"
+
+variables:
+  duckdb_path: "/data/capstone.duckdb"
+  years: "2024,2025"
+  taxi_types: "green,yellow"
+
+tasks:
+  - id: check_database
+    type: io.kestra.core.tasks.scripts.Bash
+    description: Check if DuckDB database exists
+    runners:
+      docker:
+        image: alpine:latest
+    commands:
+      - |
+        if [ ! -f {{ vars.duckdb_path }} ]; then
+          echo "Database file does not exist, will be created by ingestion"
+          exit 0
+        else
+          echo "Database file exists"
+          exit 0
+        fi
+
+  - id: ingestion
+    type: io.kestra.core.tasks.scripts.Bash
+    description: Run dlt ingestion pipeline
+    dependsOn:
+      - check_database
+    env:
+      DUCKDB_PATH: "{{ vars.duckdb_path }}"
+      YEARS: "{{ vars.years }}"
+      TAXI_TYPES: "{{ vars.taxi_types }}"
+    runners:
+      docker:
+        image: python:3.11-slim
+        pull: true
+    commands:
+      - pip install dlt[duckdb] --quiet --no-cache-dir
+      - pip install pyarrow --quiet --no-cache-dir
+      - mkdir -p /data
+      - |
+        python << 'EOF'
+        import dlt
+        import os
+
+        # Source definition inline
+        @dlt.source(name="nyc_taxi")
+        def nyc_taxi_source(years, taxi_types):
+            for year in years:
+                for taxi_type in taxi_types:
+                    for month in range(1, 13):
+                        yield trips_resource(year, month, taxi_type)
+
+        @dlt.resource(write_disposition="append", primary_key="index")
+        def trips_resource(year, month, taxi_type):
+            import logging
+            from dlt.sources.filesystem import readers
+
+            url = f"https://nyc-tlc.s3.amazonaws.com/trip/data/{taxi_type}_tripdata_{year}-{month:02d}.parquet"
+            try:
+                trips = readers.read_parquet(url)
+                for idx, trip in enumerate(trips):
+                    yield {
+                        **trip,
+                        "_ingest_year": year,
+                        "_ingest_month": month,
+                        "_ingest_taxi_type": taxi_type,
+                        "_ingest_file": f"{taxi_type}_tripdata_{year}-{month:02d}.parquet",
+                        "_row_index": idx
+                    }
+            except Exception as e:
+                logging.warning(f"Could not load {taxi_type} {year}-{month:02d}: {e}")
+                return
+
+        # Parse environment variables
+        years = [int(y.strip()) for y in os.getenv("YEARS", "2024,2025").split(",")]
+        taxi_types = [t.strip() for t in os.getenv("TAXI_TYPES", "green,yellow").split(",")]
+        db_path = os.getenv("DUCKDB_PATH", "/data/capstone.duckdb")
+
+        # Set env var for dlt DuckDB connection
+        os.environ["DESTINATION_DUCKDB__CREDENTIALS__DATABASE"] = db_path
+
+        # Run pipeline
+        pipeline = dlt.pipeline(
+            pipeline_name="nyc_taxi_ingestion",
+            destination="duckdb",
+            dataset_name="raw",
+        )
+
+        load_info = pipeline.run(nyc_taxi_source(years, taxi_types))
+
+        # Summary
+        total_rows = 0
+        for pkg in load_info.load_packages:
+            for table, count in pkg.table_counts.items():
+                total_rows += count
+                print(f"Loaded {table}: {count:,} rows")
+
+        print(f"Total: {total_rows:,} rows loaded")
+        EOF
+    inputFiles:
+      - /data
+    outputFiles:
+      - /data
+
+  - id: transformation
+    type: io.kestra.core.tasks.scripts.Bash
+    description: Run dbt transformations
+    dependsOn:
+      - ingestion
+    env:
+      DUCKDB_PATH: "{{ vars.duckdb_path }}"
+    runners:
+      docker:
+        image: python:3.11-slim
+        pull: true
+    commands:
+      - pip install dbt-core dbt-duckdb --quiet --no-cache-dir
+      - mkdir -p /data
+      - |
+        cat > dbt_project.yml << 'EOF'
+        name: 'nyc_taxi_analytics'
+        version: '1.0.0'
+        config-version: 2
+        profile: 'nyc_taxi_analytics'
+        model-paths: ["models"]
+        target-path: "target"
+        clean-targets: ["target", "dbt_packages"]
+        EOF
+      - |
+        cat > profiles.yml << 'EOF'
+        nyc_taxi_analytics:
+          outputs:
+            dev:
+              type: duckdb
+              path: "{{ vars.duckdb_path }}"
+              schema: analytics
+          target: dev
+        EOF
+      - dbt run --profiles-dir . --project-dir .
+    inputFiles:
+      - /data
+
+  - id: tests
+    type: io.kestra.core.tasks.scripts.Bash
+    description: Run dbt tests
+    dependsOn:
+      - transformation
+    runners:
+      docker:
+        image: python:3.11-slim
+        pull: true
+    commands:
+      - dbt test --profiles-dir . --project-dir .
+    inputFiles:
+      - /data
+
+  - id: success_notification
+    type: io.kestra.core.tasks.log.Log
+    dependsOn:
+      - tests
+    description: Pipeline completed successfully
+    message: "🎉 NYC Taxi Analytics Pipeline completed successfully!"
+
+triggers:
+  - id: schedule
+    type: io.kestra.core.models.triggers.types.Schedule
+    cron: "0 2 * * *"  # Run daily at 2 AM
+    description: Daily schedule (disabled by default)
+    disabled: true

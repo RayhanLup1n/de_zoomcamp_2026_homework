@@ -1,0 +1,16 @@
+datasources:
+  postgres:
+    url: jdbc:h2:mem:kestra;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;IGNORECASE=TRUE
+    driverClassName: org.h2.Driver
+    username: sa
+    password: ""
+
+kestra:
+  repository:
+    type: memory
+  queue:
+    type: memory
+  storage:
+    type: local
+    local:
+      basePath: /app/storage

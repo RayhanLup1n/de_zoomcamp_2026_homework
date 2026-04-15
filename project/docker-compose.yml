@@ -1,0 +1,146 @@
+services:
+  # ──────────────────────────────────────────────────────
+  # Ingestion Service (manual-only via profile)
+  # Run with: docker compose --profile ingest up ingestion
+  # ──────────────────────────────────────────────────────
+  ingestion:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.ingestion
+    container_name: capstone-ingestion
+    profiles:
+      - ingest
+    volumes:
+      - ./ingestion:/app/ingestion
+      - ./data:/data
+      - ./de-zoomcamp-2026-484615-35de71278b22.json:/app/de-zoomcamp-2026-484615-35de71278b22.json
+    environment:
+      - DUCKDB_PATH=/data/capstone.duckdb
+      - YEARS=${YEARS:-2024,2025}
+      - TAXI_TYPES=${TAXI_TYPES:-green,yellow}
+      - TEST_MODE=${TEST_MODE:-false}
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS}
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID}
+      - GCS_BUCKET_NAME=${GCS_BUCKET_NAME}
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+    networks:
+      - capstone-network
+
+  # ──────────────────────────────────────────────────────
+  # PostgreSQL - Backend for Kestra
+  # ──────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: capstone-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: kestra
+      POSTGRES_USER: kestra
+      POSTGRES_PASSWORD: k3str4
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kestra -d kestra"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - capstone-network
+
+  # ──────────────────────────────────────────────────────
+  # Orchestration - Kestra
+  # Depends on: postgres (healthy)
+  # ──────────────────────────────────────────────────────
+  kestra:
+    image: kestra/kestra:latest
+    container_name: capstone-kestra
+    restart: unless-stopped
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - /app/kestra server standalone --worker-thread 1
+    ports:
+      - "${KESTRA_PORT:-8080}:8080"
+    volumes:
+      - ./kestra/flows:/opt/kestra/flows
+      - ./data:/data
+      - kestra-storage:/app/storage
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      KESTRA_CONFIGURATION: |
+        datasources:
+          postgres:
+            url: jdbc:postgresql://postgres:5432/kestra
+            driverClassName: org.postgresql.Driver
+            username: kestra
+            password: k3str4
+        kestra:
+          repository:
+            type: postgres
+          queue:
+            type: postgres
+          storage:
+            type: local
+            local:
+              base-path: "/app/storage"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - capstone-network
+
+  # ──────────────────────────────────────────────────────
+  # Transformation - dbt (manual-only via profile)
+  # Run with: docker compose --profile transform up dbt
+  # ──────────────────────────────────────────────────────
+  dbt:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dbt
+    container_name: capstone-dbt
+    profiles:
+      - transform
+    volumes:
+      - ./dbt:/app/dbt
+      - ./data:/data
+      - ./de-zoomcamp-2026-484615-35de71278b22.json:/app/de-zoomcamp-2026-484615-35de71278b22.json
+    environment:
+      - DUCKDB_PATH=/data/capstone.duckdb
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS}
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID}
+    networks:
+      - capstone-network
+
+  # ──────────────────────────────────────────────────────
+  # Dashboard - Streamlit
+  # Starts by default (reads from existing DuckDB)
+  # ──────────────────────────────────────────────────────
+  dashboard:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dashboard
+    container_name: capstone-dashboard
+    restart: unless-stopped
+    ports:
+      - "${DASHBOARD_PORT:-8501}:8501"
+    volumes:
+      - ./dashboard:/app/dashboard
+      - ./data:/data
+      - ${LOCAL_GCP_CREDENTIALS}:/app/de-zoomcamp-2026-484615-35de71278b22.json
+    environment:
+      - DUCKDB_PATH=/data/capstone.duckdb
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS}
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID}
+    networks:
+      - capstone-network
+
+networks:
+  capstone-network:
+    driver: bridge
+
+volumes:
+  kestra-storage:
+  pg-data:

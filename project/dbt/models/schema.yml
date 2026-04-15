@@ -1,0 +1,130 @@
+version: 2
+
+sources:
+  - name: raw
+    description: "Raw data from dlt ingestion"
+    schema: raw
+    tables:
+      - name: trips_resource
+        description: "All NYC taxi trips (Green and Yellow) loaded by dlt into a single table"
+
+models:
+  - name: stg_green_trips
+    description: "Staging: cleaned and standardized Green taxi trips"
+    config:
+      materialized: table
+    tags: ['staging']
+
+  - name: stg_yellow_trips
+    description: "Staging: cleaned and standardized Yellow taxi trips"
+    config:
+      materialized: table
+    tags: ['staging']
+
+  - name: fct_trips
+    description: "Fact table: all taxi trips (Green + Yellow) combined"
+    config:
+      materialized: table
+    tags: ['core', 'mart']
+    columns:
+      - name: trip_id
+        description: "Unique trip identifier"
+        tests:
+          - not_null
+      - name: pickup_datetime
+        description: "Trip pickup time"
+        tests:
+          - not_null
+      - name: dropoff_datetime
+        description: "Trip dropoff time"
+        tests:
+          - not_null
+      - name: passenger_count
+        description: "Number of passengers"
+      - name: trip_distance
+        description: "Trip distance in miles"
+      - name: payment_type
+        description: "Payment type code (nullable in source data)"
+        tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: payment_type_name
+        description: "Human-readable payment type"
+        tests:
+          - not_null
+      - name: fare_amount
+        description: "Fare amount ($)"
+      - name: extra
+        description: "Extra charges ($)"
+      - name: mta_tax
+        description: "MTA tax ($)"
+      - name: tip_amount
+        description: "Tip amount ($)"
+      - name: tolls_amount
+        description: "Tolls amount ($)"
+      - name: improvement_surcharge
+        description: "Improvement surcharge ($)"
+      - name: total_amount
+        description: "Total amount ($)"
+      - name: congestion_surcharge
+        description: "Congestion surcharge ($)"
+      - name: airport_fee
+        description: "Airport fee ($)"
+      - name: trip_duration_minutes
+        description: "Trip duration in minutes"
+      - name: trip_year
+        description: "Year of trip"
+      - name: trip_month
+        description: "Month of trip"
+      - name: trip_day
+        description: "Day of month"
+      - name: trip_hour
+        description: "Hour of day (0-23)"
+      - name: trip_day_of_week
+        description: "Day of week (0=Sunday, 6=Saturday)"
+      - name: taxi_type
+        description: "Taxi type (Green or Yellow)"
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['Green', 'Yellow']
+      - name: ingest_year
+        description: "Ingest year metadata"
+      - name: ingest_month
+        description: "Ingest month metadata"
+      - name: ingest_file
+        description: "Ingest filename metadata"
+
+  - name: trips_payment_type
+    description: "Analytics: trip count and percentage by payment type"
+    config:
+      materialized: table
+    tags: ['analytics', 'mart']
+    columns:
+      - name: payment_type_name
+        description: "Human-readable payment type"
+        tests:
+          - not_null
+      - name: trip_count
+        description: "Number of trips"
+        tests:
+          - not_null
+
+  - name: trips_by_hour
+    description: "Analytics: trip volume and metrics by hour of day"
+    config:
+      materialized: table
+    tags: ['analytics', 'mart']
+    columns:
+      - name: trip_hour
+        description: "Hour of day (0-23)"
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]
+      - name: trip_count
+        description: "Number of trips"
+        tests:
+          - not_null

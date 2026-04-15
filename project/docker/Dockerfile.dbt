@@ -1,0 +1,23 @@
+FROM python:3.11-slim
+
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY dbt/requirements.txt /app/
+RUN pip install --no-cache-dir -r /app/requirements.txt
+
+# Copy dbt project
+COPY dbt/ /app/dbt/
+
+# Create profiles directory
+RUN mkdir -p /root/.dbt
+
+# Default command
+CMD ["tail", "-f", "/dev/null"]

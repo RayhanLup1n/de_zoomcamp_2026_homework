@@ -1,0 +1,17 @@
+nyc_taxi_analytics:
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var('DUCKDB_PATH') }}"
+      extensions:
+        - parquet
+    
+    prod:
+      type: bigquery
+      method: service-account
+      project: de-zoomcamp-2026-484615
+      dataset: analytics
+      threads: 4
+      keyfile: "{{ env_var('GOOGLE_APPLICATION_CREDENTIALS') }}"
+      location: US  # Anda bisa ganti ke 'asia-southeast2' jika ingin data di Jakarta
+  target: dev
