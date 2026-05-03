@@ -37,15 +37,16 @@ builder_rayhanAnanda/
 ├── workshop/                    # Workshop solutions
 │   └── 01-dlt-workshop/         # DLT Ingestion Workshop
 │
-├── project/                     # Capstone Project - NYC Taxi Analytics
+├── project/                     # Capstone Project - Indonesia Weather Analytics
 │   ├── README.md                # Detailed project documentation
+│   ├── Dockerfile               # Cloud Run deployment
 │   ├── docker-compose.yml       # Multi-service orchestration
-│   ├── dashboard/               # Streamlit dashboard
-│   ├── dbt/                     # dbt transformations
-│   ├── ingestion/               # dlt data ingestion
-│   ├── kestra/                  # Workflow orchestration
-│   ├── terraform/               # Infrastructure as Code
-│   └── data/                    # DuckDB database
+│   ├── dashboard/               # Streamlit dashboard (2 tiles + multi-filter)
+│   ├── dbt/                     # dbt transformations (3-layer + 18 tests)
+│   ├── ingestion/               # dlt data ingestion (Open-Meteo API)
+│   ├── kestra/                  # Workflow orchestration (end-to-end DAG)
+│   ├── terraform/               # Infrastructure as Code (GCS + BigQuery)
+│   └── data/                    # DuckDB database (local mode)
 │
 ├── learn/                       # Learning notes & materials
 │   ├── 01-docker-sql-terraform/
@@ -138,12 +139,14 @@ builder_rayhanAnanda/
 - DuckDB as local data warehouse
 - AI-assisted pipeline building
 
-### Capstone Project: NYC Taxi Analytics Dashboard
+### Capstone Project: Indonesia Weather Analytics Dashboard
 - End-to-end data pipeline from ingestion to visualization
-- Tech stack: dlt (ingestion) + DuckDB (warehouse) + dbt (transformation) + Streamlit (dashboard)
-- Docker Compose for local deployment
-- NYC TLC taxi trip data analysis (1.2M+ trips)
-- Interactive dashboard with payment type and hourly trip patterns
+- Tech stack: dlt (ingestion) + DuckDB/BigQuery (warehouse) + dbt (transformation) + Streamlit (dashboard)
+- Cloud deployment: Terraform (IaC) + BigQuery (partitioned + clustered) + Cloud Run (dashboard)
+- Docker Compose for local deployment with Kestra orchestration
+- Open-Meteo weather data analysis for 5 Indonesian cities (10,960 daily observations)
+- Interactive dashboard with multi-year and multi-city comparison filters
+- Live demo: https://weather-dashboard-1018535169724.us-central1.run.app
 
 ---
 
@@ -267,4 +270,4 @@ Data Engineering Zoomcamp 2026 — **Completed** ✅
 All modules, workshops, and the capstone project have been successfully completed.
 - 7 Core Modules
 - 1 Workshop (DLT Ingestion)
-- 1 Capstone Project (NYC Taxi Analytics)
+- 1 Capstone Project (Indonesia Weather Analytics)

@@ -336,6 +336,17 @@ All resources stay within **GCP Free Tier** ($0 cost):
 - BigQuery: ~11K rows = <1 MB storage (free tier: 10 GB)
 - BigQuery queries: <10 MB per query (free tier: 1 TB/month)
 - GCS: <5 MB staging data (free tier: 5 GB)
+- Cloud Run: minimal traffic (free tier: 2M requests/month)
+
+### Live Dashboard (Cloud Run)
+
+The dashboard is deployed on **Google Cloud Run** and accessible publicly:
+
+**https://weather-dashboard-1018535169724.us-central1.run.app**
+
+- Auto-scales from 0 to 2 instances (pay-per-request, $0 at low traffic)
+- Connects directly to BigQuery (no DuckDB needed in cloud mode)
+- Deployed via `gcloud run deploy --source .`
 
 ---
 
@@ -345,6 +356,7 @@ All resources stay within **GCP Free Tier** ($0 cost):
 project/
 ├── README.md                 # This file
 ├── Makefile                  # Convenience commands (make setup, etc.)
+├── Dockerfile                # Cloud Run deployment (Streamlit dashboard)
 ├── docker-compose.yml        # Multi-service orchestration
 ├── .env.example              # Environment variable template
 ├── .gitignore                # Git ignore rules
@@ -418,34 +430,6 @@ Access Kestra UI at `http://localhost:8080` to:
 - Trigger manual executions
 - Monitor execution logs
 - Configure scheduled runs
-
----
-
-## Reproducibility Checklist
-
-- [x] No hard-coded file paths or credentials
-- [x] `.env.example` provided with all required variables
-- [x] Docker Compose works from fresh clone
-- [x] All dependencies pinned in `requirements.txt`
-- [x] `make setup` runs full pipeline in one command
-- [x] Step-by-step instructions in README
-- [x] Data sourced from free, publicly accessible API (no auth required)
-- [x] Cloud resources provisioned via Terraform (IaC)
-- [x] `.gitignore` excludes credentials, data files, and build artifacts
-
----
-
-## Evaluation Criteria
-
-| Criteria | Implementation | Score Target |
-|----------|----------------|-------------|
-| **Problem Description** | Comprehensive problem + solution + business value | 4/4 |
-| **Cloud** | GCP (BigQuery + GCS) + Terraform IaC | 4/4 |
-| **Data Ingestion (Batch)** | End-to-end Kestra DAG with multiple steps | 4/4 |
-| **Data Warehouse** | BigQuery with partition (date) + cluster (city) + explanation | 4/4 |
-| **Transformations** | dbt 3-layer architecture with tests | 4/4 |
-| **Dashboard** | Streamlit with 2 tiles (categorical + temporal) | 4/4 |
-| **Reproducibility** | Docker Compose + Makefile + clear docs | 4/4 |
 
 ---
 
