@@ -765,8 +765,8 @@ def main():
             city_f = f"AND city_name IN ({sql_list(cities_tuple)})"
             q = f"""
                 SELECT city_name AS City, observation_year AS Year,
-                       avg_temperature_c AS "Avg (C)", min_temperature_c AS "Min (C)",
-                       max_temperature_c AS "Max (C)", total_precipitation_mm AS "Rain (mm)"
+                       avg_temperature_c AS Avg_Temp_C, min_temperature_c AS Min_C,
+                       max_temperature_c AS Max_C, total_precipitation_mm AS Rain_mm
                 FROM analytics.weather_by_city
                 WHERE {year_f} {city_f}
                 ORDER BY observation_year DESC, avg_temperature_c DESC
@@ -794,7 +794,7 @@ def main():
             q = f"""
                 SELECT city_name AS City, observation_year AS Year,
                        observation_month AS Month,
-                       total_precipitation_mm AS "Rain (mm)", rainy_days AS "Rain Days"
+                       total_precipitation_mm AS Rain_mm, rainy_days AS Rain_Days
                 FROM analytics.weather_monthly_trends
                 WHERE {year_f} {city_f}
                 ORDER BY city_name, observation_year, observation_month
