@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# Capstone Project Setup Script
-# This script initializes the project environment
+# Indonesia Weather Analytics - Setup Script
+# Creates .env file and data directory
 
 set -e
 
 echo "========================================="
-echo "  NYC Taxi Analytics Dashboard Setup"
+echo "  Indonesia Weather Analytics Setup"
 echo "========================================="
 echo ""
 
@@ -23,21 +23,8 @@ fi
 echo ""
 echo "Creating data directory..."
 mkdir -p data
-echo "✓ data directory created"
-
-# Download taxi zone lookup if not exists
-echo ""
-echo "Downloading taxi zone lookup..."
-if [ ! -f data/taxi_zone_lookup.csv ]; then
-    echo "Downloading from NYC TLC..."
-    curl -o data/taxi_zone_lookup.csv https://d37ci6v75uryu3.cloudfront.net/misc/taxi_zone_lookup.csv
-    echo "✓ taxi_zone_lookup.csv downloaded"
-else
-    echo "✓ taxi_zone_lookup.csv already exists"
-fi
-
-# Create empty .gitkeep in data directory
 touch data/.gitkeep
+echo "✓ data directory ready"
 
 echo ""
 echo "========================================="
@@ -45,8 +32,10 @@ echo "  Setup Complete!"
 echo "========================================="
 echo ""
 echo "Next steps:"
-echo "1. Review .env file and adjust if needed"
-echo "2. Run: docker-compose up -d"
-echo "3. Access Kestra UI: http://localhost:8080"
-echo "4. Access Dashboard: http://localhost:8501"
+echo "  make ingest      # Fetch weather data from Open-Meteo API"
+echo "  make transform   # Run dbt transformations"
+echo "  make serve       # Start dashboard + Kestra"
+echo ""
+echo "Or run everything at once:"
+echo "  make setup"
 echo ""

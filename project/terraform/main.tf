@@ -22,9 +22,9 @@ provider "google" {
 resource "google_storage_bucket" "data_lake" {
   name          = var.gcs_bucket_name
   location      = var.location
-  force_destroy = true  # Allow terraform destroy to remove non-empty bucket
+  force_destroy = true
 
-  # Lifecycle rule: auto-delete staging files after 30 days
+  # Auto-delete staging files after 30 days (cost control)
   lifecycle_rule {
     condition {
       age = 30
@@ -43,16 +43,13 @@ resource "google_storage_bucket" "data_lake" {
 
 # ──────────────────────────────────────────────────────
 # BigQuery Dataset: raw
-# Stores ingested taxi trip data from dlt pipeline
+# Stores ingested weather data from dlt pipeline
 # ──────────────────────────────────────────────────────
 resource "google_bigquery_dataset" "raw" {
   dataset_id    = var.bq_dataset_raw
   friendly_name = "Raw Data"
-  description   = "Raw NYC taxi trip data ingested via dlt pipeline"
+  description   = "Raw Indonesian weather data ingested via dlt pipeline from Open-Meteo API"
   location      = var.location
-
-  # Auto-delete tables after 90 days if needed (optional)
-  # default_table_expiration_ms = 7776000000  # 90 days
 
   delete_contents_on_destroy = true
 }
@@ -64,7 +61,7 @@ resource "google_bigquery_dataset" "raw" {
 resource "google_bigquery_dataset" "analytics" {
   dataset_id    = var.bq_dataset_analytics
   friendly_name = "Analytics"
-  description   = "Transformed NYC taxi analytics data produced by dbt"
+  description   = "Transformed Indonesian weather analytics produced by dbt (staging, core, analytics layers)"
   location      = var.location
 
   delete_contents_on_destroy = true

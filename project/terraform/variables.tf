@@ -11,15 +11,15 @@ variable "region" {
 }
 
 variable "location" {
-  description = "GCP location for BigQuery datasets"
+  description = "GCP location for BigQuery datasets and GCS bucket"
   type        = string
   default     = "US"
 }
 
 variable "gcs_bucket_name" {
-  description = "Name of the GCS bucket for data lake / staging"
+  description = "Name of the GCS bucket for data lake / dlt staging"
   type        = string
-  default     = "ny-taxi-data-de-zoomcamp-2026-484615"
+  default     = "weather-data-de-zoomcamp-2026-484615"
 }
 
 variable "bq_dataset_raw" {
@@ -35,7 +35,6 @@ variable "bq_dataset_analytics" {
 }
 
 variable "credentials_file" {
-  description = "Path to service account key JSON file"
+  description = "Path to GCP service account key JSON file"
   type        = string
-  default     = "../de-zoomcamp-2026-484615-35de71278b22.json"
 }

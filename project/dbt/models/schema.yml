@@ -2,129 +2,115 @@ version: 2
 
 sources:
   - name: raw
-    description: "Raw data from dlt ingestion"
+    description: "Raw data from dlt ingestion (Open-Meteo Historical Weather API)"
     schema: raw
     tables:
-      - name: trips_resource
-        description: "All NYC taxi trips (Green and Yellow) loaded by dlt into a single table"
+      - name: daily_weather
+        description: "Daily weather observations for 5 Indonesian cities loaded by dlt"
 
 models:
-  - name: stg_green_trips
-    description: "Staging: cleaned and standardized Green taxi trips"
+  - name: stg_daily_weather
+    description: "Staging: cleaned, standardized daily weather observations with computed fields"
     config:
       materialized: table
     tags: ['staging']
+    columns:
+      - name: weather_id
+        description: "Unique weather observation ID (city_name-date)"
+        tests:
+          - unique
+          - not_null
+      - name: city_name
+        description: "Indonesian city name"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Jakarta', 'Surabaya', 'Denpasar', 'Medan', 'Makassar']
+      - name: observation_date
+        description: "Date of weather observation"
+        tests:
+          - not_null
+      - name: temperature_mean_c
+        description: "Daily mean temperature (Celsius)"
+        tests:
+          - not_null
+      - name: weather_category
+        description: "Simplified weather category based on WMO code"
+        tests:
+          - accepted_values:
+              values: ['Clear', 'Cloudy', 'Fog', 'Drizzle', 'Rain', 'Rain Showers', 'Thunderstorm', 'Unknown']
 
-  - name: stg_yellow_trips
-    description: "Staging: cleaned and standardized Yellow taxi trips"
-    config:
-      materialized: table
-    tags: ['staging']
-
-  - name: fct_trips
-    description: "Fact table: all taxi trips (Green + Yellow) combined"
+  - name: fct_weather
+    description: >
+      Fact table: all daily weather observations across Indonesian cities.
+      Partitioned by observation_date (monthly) and clustered by city_name in BigQuery.
     config:
       materialized: table
     tags: ['core', 'mart']
     columns:
-      - name: trip_id
-        description: "Unique trip identifier"
+      - name: weather_id
+        description: "Unique weather observation ID"
+        tests:
+          - unique
+          - not_null
+      - name: city_name
+        description: "Indonesian city name"
         tests:
           - not_null
-      - name: pickup_datetime
-        description: "Trip pickup time"
+      - name: observation_date
+        description: "Date of weather observation"
         tests:
           - not_null
-      - name: dropoff_datetime
-        description: "Trip dropoff time"
-        tests:
-          - not_null
-      - name: passenger_count
-        description: "Number of passengers"
-      - name: trip_distance
-        description: "Trip distance in miles"
-      - name: payment_type
-        description: "Payment type code (nullable in source data)"
-        tests:
-          - not_null:
-              config:
-                severity: warn
-      - name: payment_type_name
-        description: "Human-readable payment type"
-        tests:
-          - not_null
-      - name: fare_amount
-        description: "Fare amount ($)"
-      - name: extra
-        description: "Extra charges ($)"
-      - name: mta_tax
-        description: "MTA tax ($)"
-      - name: tip_amount
-        description: "Tip amount ($)"
-      - name: tolls_amount
-        description: "Tolls amount ($)"
-      - name: improvement_surcharge
-        description: "Improvement surcharge ($)"
-      - name: total_amount
-        description: "Total amount ($)"
-      - name: congestion_surcharge
-        description: "Congestion surcharge ($)"
-      - name: airport_fee
-        description: "Airport fee ($)"
-      - name: trip_duration_minutes
-        description: "Trip duration in minutes"
-      - name: trip_year
-        description: "Year of trip"
-      - name: trip_month
-        description: "Month of trip"
-      - name: trip_day
-        description: "Day of month"
-      - name: trip_hour
-        description: "Hour of day (0-23)"
-      - name: trip_day_of_week
-        description: "Day of week (0=Sunday, 6=Saturday)"
-      - name: taxi_type
-        description: "Taxi type (Green or Yellow)"
+      - name: temperature_mean_c
+        description: "Daily mean temperature (Celsius)"
+      - name: precipitation_mm
+        description: "Daily total precipitation (mm)"
+      - name: wind_speed_max_kmh
+        description: "Daily maximum wind speed (km/h)"
+      - name: sunshine_hours
+        description: "Daily sunshine duration (hours)"
+      - name: weather_category
+        description: "Simplified weather category"
         tests:
           - accepted_values:
-              arguments:
-                values: ['Green', 'Yellow']
-      - name: ingest_year
-        description: "Ingest year metadata"
-      - name: ingest_month
-        description: "Ingest month metadata"
-      - name: ingest_file
-        description: "Ingest filename metadata"
+              values: ['Clear', 'Cloudy', 'Fog', 'Drizzle', 'Rain', 'Rain Showers', 'Thunderstorm', 'Unknown']
+      - name: is_rainy_day
+        description: "Boolean flag: true if precipitation > 0.1mm"
 
-  - name: trips_payment_type
-    description: "Analytics: trip count and percentage by payment type"
+  - name: weather_by_city
+    description: "Analytics: weather metrics aggregated by city and year (Dashboard Tile 1)"
     config:
       materialized: table
     tags: ['analytics', 'mart']
     columns:
-      - name: payment_type_name
-        description: "Human-readable payment type"
+      - name: city_name
+        description: "City name"
         tests:
           - not_null
-      - name: trip_count
-        description: "Number of trips"
+      - name: observation_year
+        description: "Year of observations"
+        tests:
+          - not_null
+      - name: total_observations
+        description: "Number of daily observations in the year"
         tests:
           - not_null
 
-  - name: trips_by_hour
-    description: "Analytics: trip volume and metrics by hour of day"
+  - name: weather_monthly_trends
+    description: "Analytics: monthly weather trends across all cities (Dashboard Tile 2)"
     config:
       materialized: table
     tags: ['analytics', 'mart']
     columns:
-      - name: trip_hour
-        description: "Hour of day (0-23)"
+      - name: city_name
+        description: "City name"
         tests:
           - not_null
-          - accepted_values:
-              arguments:
-                values: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]
-      - name: trip_count
-        description: "Number of trips"
+      - name: observation_month
+        description: "Month (1-12)"
+        tests:
+          - not_null
+      - name: days_in_period
+        description: "Number of days in the month"
         tests:
           - not_null

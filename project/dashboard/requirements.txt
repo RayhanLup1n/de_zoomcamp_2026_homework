@@ -2,3 +2,6 @@ streamlit>=1.32.0
 duckdb>=0.9.0
 pandas>=2.0.0
 plotly>=5.18.0
+google-cloud-bigquery>=3.14.0
+google-auth>=2.27.0
+db-dtypes>=1.2.0

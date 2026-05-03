@@ -1,8 +1,9 @@
-id: nyc_taxi_pipeline
+id: indonesia_weather_pipeline
 namespace: de_zoomcamp
 description: >
-  NYC Taxi Analytics Pipeline.
-  Ingests taxi data, runs transformations, and validates with tests.
+  Indonesia Weather Analytics Pipeline.
+  End-to-end DAG: Fetch weather data from Open-Meteo API,
+  load into DuckDB, transform with dbt, validate with tests.
 
 labels:
   project: "de-zoomcamp-capstone"
@@ -10,170 +11,153 @@ labels:
 
 variables:
   duckdb_path: "/data/capstone.duckdb"
-  years: "2024,2025"
-  taxi_types: "green,yellow"
+  start_date: "2020-01-01"
+  end_date: "2025-12-31"
 
 tasks:
-  - id: check_database
-    type: io.kestra.core.tasks.scripts.Bash
-    description: Check if DuckDB database exists
-    runners:
-      docker:
-        image: alpine:latest
+  # ── Step 1: Validate Environment ──
+  - id: validate_environment
+    type: io.kestra.plugin.scripts.shell.Commands
+    description: Check prerequisites and create data directory
+    taskRunner:
+      type: io.kestra.plugin.scripts.runner.docker.Docker
+      image: alpine:3.19
     commands:
-      - |
-        if [ ! -f {{ vars.duckdb_path }} ]; then
-          echo "Database file does not exist, will be created by ingestion"
-          exit 0
-        else
-          echo "Database file exists"
-          exit 0
-        fi
-
-  - id: ingestion
-    type: io.kestra.core.tasks.scripts.Bash
-    description: Run dlt ingestion pipeline
-    dependsOn:
-      - check_database
-    env:
-      DUCKDB_PATH: "{{ vars.duckdb_path }}"
-      YEARS: "{{ vars.years }}"
-      TAXI_TYPES: "{{ vars.taxi_types }}"
-    runners:
-      docker:
-        image: python:3.11-slim
-        pull: true
-    commands:
-      - pip install dlt[duckdb] --quiet --no-cache-dir
-      - pip install pyarrow --quiet --no-cache-dir
+      - echo "=== Validating Environment ==="
       - mkdir -p /data
-      - |
-        python << 'EOF'
+      - echo "✓ Data directory ready"
+      - echo "=== Environment validated ==="
+
+  # ── Step 2: Fetch Weather Data from Open-Meteo API ──
+  - id: fetch_weather_data
+    type: io.kestra.plugin.scripts.python.Commands
+    description: Fetch daily weather data for 5 Indonesian cities from Open-Meteo API
+    dependsOn:
+      - validate_environment
+    taskRunner:
+      type: io.kestra.plugin.scripts.runner.docker.Docker
+      image: python:3.11-slim
+      volumes:
+        - "/data:/data"
+    beforeCommands:
+      - pip install dlt[duckdb] requests --quiet --no-cache-dir
+    commands:
+      - python -c "{{ read('fetch_script.py') }}"
+    inputFiles:
+      fetch_script.py: |
         import dlt
+        import requests
+        import logging
         import os
 
-        # Source definition inline
-        @dlt.source(name="nyc_taxi")
-        def nyc_taxi_source(years, taxi_types):
-            for year in years:
-                for taxi_type in taxi_types:
-                    for month in range(1, 13):
-                        yield trips_resource(year, month, taxi_type)
+        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+        logger = logging.getLogger(__name__)
 
-        @dlt.resource(write_disposition="append", primary_key="index")
-        def trips_resource(year, month, taxi_type):
-            import logging
-            from dlt.sources.filesystem import readers
+        CITIES = {
+            "Jakarta": {"latitude": -6.21, "longitude": 106.85},
+            "Surabaya": {"latitude": -7.25, "longitude": 112.75},
+            "Denpasar": {"latitude": -8.65, "longitude": 115.22},
+            "Medan": {"latitude": 3.59, "longitude": 98.67},
+            "Makassar": {"latitude": -5.14, "longitude": 119.42},
+        }
 
-            url = f"https://nyc-tlc.s3.amazonaws.com/trip/data/{taxi_type}_tripdata_{year}-{month:02d}.parquet"
-            try:
-                trips = readers.read_parquet(url)
-                for idx, trip in enumerate(trips):
+        OPEN_METEO_URL = "https://archive-api.open-meteo.com/v1/archive"
+        DAILY_VARS = "temperature_2m_max,temperature_2m_min,temperature_2m_mean,precipitation_sum,rain_sum,windspeed_10m_max,sunshine_duration,weathercode"
+
+        @dlt.resource(name="daily_weather", write_disposition="replace")
+        def daily_weather():
+            for city, coords in CITIES.items():
+                logger.info(f"Fetching {city}...")
+                resp = requests.get(OPEN_METEO_URL, params={
+                    "latitude": coords["latitude"],
+                    "longitude": coords["longitude"],
+                    "start_date": os.getenv("START_DATE", "2020-01-01"),
+                    "end_date": os.getenv("END_DATE", "2025-12-31"),
+                    "daily": DAILY_VARS,
+                    "timezone": "Asia/Jakarta",
+                }, timeout=120)
+                resp.raise_for_status()
+                daily = resp.json()["daily"]
+                for i, date in enumerate(daily["time"]):
                     yield {
-                        **trip,
-                        "_ingest_year": year,
-                        "_ingest_month": month,
-                        "_ingest_taxi_type": taxi_type,
-                        "_ingest_file": f"{taxi_type}_tripdata_{year}-{month:02d}.parquet",
-                        "_row_index": idx
+                        "city_name": city,
+                        "latitude": coords["latitude"],
+                        "longitude": coords["longitude"],
+                        "observation_date": date,
+                        "temperature_2m_max": daily["temperature_2m_max"][i],
+                        "temperature_2m_min": daily["temperature_2m_min"][i],
+                        "temperature_2m_mean": daily["temperature_2m_mean"][i],
+                        "precipitation_sum": daily["precipitation_sum"][i],
+                        "rain_sum": daily["rain_sum"][i],
+                        "windspeed_10m_max": daily["windspeed_10m_max"][i],
+                        "sunshine_duration": daily["sunshine_duration"][i],
+                        "weather_code": daily["weathercode"][i],
                     }
-            except Exception as e:
-                logging.warning(f"Could not load {taxi_type} {year}-{month:02d}: {e}")
-                return
+                logger.info(f"  ✓ {city} complete")
 
-        # Parse environment variables
-        years = [int(y.strip()) for y in os.getenv("YEARS", "2024,2025").split(",")]
-        taxi_types = [t.strip() for t in os.getenv("TAXI_TYPES", "green,yellow").split(",")]
-        db_path = os.getenv("DUCKDB_PATH", "/data/capstone.duckdb")
-
-        # Set env var for dlt DuckDB connection
-        os.environ["DESTINATION_DUCKDB__CREDENTIALS__DATABASE"] = db_path
-
-        # Run pipeline
         pipeline = dlt.pipeline(
-            pipeline_name="nyc_taxi_ingestion",
-            destination="duckdb",
+            pipeline_name="indonesia_weather",
+            destination=dlt.destinations.duckdb(credentials="/data/capstone.duckdb"),
             dataset_name="raw",
         )
+        load_info = pipeline.run(daily_weather())
+        logger.info("=== Ingestion complete! ===")
+        print(load_info)
+    env:
+      START_DATE: "{{ vars.start_date }}"
+      END_DATE: "{{ vars.end_date }}"
 
-        load_info = pipeline.run(nyc_taxi_source(years, taxi_types))
-
-        # Summary
-        total_rows = 0
-        for pkg in load_info.load_packages:
-            for table, count in pkg.table_counts.items():
-                total_rows += count
-                print(f"Loaded {table}: {count:,} rows")
-
-        print(f"Total: {total_rows:,} rows loaded")
-        EOF
-    inputFiles:
-      - /data
-    outputFiles:
-      - /data
-
-  - id: transformation
-    type: io.kestra.core.tasks.scripts.Bash
-    description: Run dbt transformations
+  # ── Step 3: Run dbt Transformations ──
+  - id: dbt_transform
+    type: io.kestra.plugin.scripts.python.Commands
+    description: Run dbt models (staging → core → analytics)
     dependsOn:
-      - ingestion
+      - fetch_weather_data
+    taskRunner:
+      type: io.kestra.plugin.scripts.runner.docker.Docker
+      image: python:3.11-slim
+      volumes:
+        - "/data:/data"
+    beforeCommands:
+      - pip install dbt-core dbt-duckdb --quiet --no-cache-dir
+    commands:
+      - cd /app/dbt && dbt run --profiles-dir . --project-dir .
     env:
       DUCKDB_PATH: "{{ vars.duckdb_path }}"
-    runners:
-      docker:
-        image: python:3.11-slim
-        pull: true
-    commands:
-      - pip install dbt-core dbt-duckdb --quiet --no-cache-dir
-      - mkdir -p /data
-      - |
-        cat > dbt_project.yml << 'EOF'
-        name: 'nyc_taxi_analytics'
-        version: '1.0.0'
-        config-version: 2
-        profile: 'nyc_taxi_analytics'
-        model-paths: ["models"]
-        target-path: "target"
-        clean-targets: ["target", "dbt_packages"]
-        EOF
-      - |
-        cat > profiles.yml << 'EOF'
-        nyc_taxi_analytics:
-          outputs:
-            dev:
-              type: duckdb
-              path: "{{ vars.duckdb_path }}"
-              schema: analytics
-          target: dev
-        EOF
-      - dbt run --profiles-dir . --project-dir .
-    inputFiles:
-      - /data
 
-  - id: tests
-    type: io.kestra.core.tasks.scripts.Bash
-    description: Run dbt tests
+  # ── Step 4: Run dbt Tests ──
+  - id: dbt_test
+    type: io.kestra.plugin.scripts.python.Commands
+    description: Run dbt tests to validate data quality
     dependsOn:
-      - transformation
-    runners:
-      docker:
-        image: python:3.11-slim
-        pull: true
+      - dbt_transform
+    taskRunner:
+      type: io.kestra.plugin.scripts.runner.docker.Docker
+      image: python:3.11-slim
+      volumes:
+        - "/data:/data"
+    beforeCommands:
+      - pip install dbt-core dbt-duckdb --quiet --no-cache-dir
     commands:
-      - dbt test --profiles-dir . --project-dir .
-    inputFiles:
-      - /data
+      - cd /app/dbt && dbt test --profiles-dir . --project-dir .
+    env:
+      DUCKDB_PATH: "{{ vars.duckdb_path }}"
 
-  - id: success_notification
+  # ── Step 5: Pipeline Complete ──
+  - id: pipeline_complete
     type: io.kestra.core.tasks.log.Log
     dependsOn:
-      - tests
+      - dbt_test
     description: Pipeline completed successfully
-    message: "🎉 NYC Taxi Analytics Pipeline completed successfully!"
+    message: >
+      ✅ Indonesia Weather Analytics Pipeline completed successfully!
+      Data: 5 Indonesian cities (2020-2025)
+      Layers: raw → staging → core → analytics
+      Dashboard: http://localhost:8501
 
 triggers:
-  - id: schedule
+  - id: daily_schedule
     type: io.kestra.core.models.triggers.types.Schedule
-    cron: "0 2 * * *"  # Run daily at 2 AM
-    description: Daily schedule (disabled by default)
+    cron: "0 6 * * *"
+    description: Daily refresh at 6 AM Jakarta time (disabled by default)
     disabled: true

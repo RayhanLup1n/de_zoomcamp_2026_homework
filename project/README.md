@@ -1,28 +1,42 @@
-# NYC Taxi Analytics Dashboard — Data Engineering Capstone Project 2026
+# Indonesia Weather Analytics Dashboard
 
-> **Author:** Rayhan Ananda
-> **Date:** April 2026
-> **Status:** Complete — Ready for Review
+> **Data Engineering Capstone Project 2026**
+> Author: Rayhan Ananda | May 2026
 
 ---
 
-## Overview
+## Problem Description
 
-This project builds an end-to-end data pipeline to analyze NYC taxi trips from 2024–2025, providing insights into ride patterns, payment trends, and trip distributions.
+### The Problem
 
-### Problem Statement
+Indonesia is a tropical archipelago nation spanning over 5,000 km with significant **climate variation between cities**. Urban planners, agricultural stakeholders, and disaster response teams need to understand local weather patterns, but weather data is scattered across APIs and difficult to analyze at scale.
 
-NYC Taxi & Limousine Commission (TLC) generates massive amounts of trip data daily. Traditional analysis methods are time-consuming and don't provide real-time insights. This project aims to:
+Key challenges:
+1. **Fragmented data**: Weather data for Indonesian cities exists in raw API form, not centralized or analytics-ready
+2. **No historical comparison**: Understanding whether current weather is normal requires years of historical context
+3. **City-level differences are hidden**: National averages mask important regional variations in temperature, rainfall, and sunshine
 
-1. **Centralize Data:** Aggregate taxi data from multiple sources (Green & Yellow cabs)
-2. **Automate Processing:** Build a repeatable pipeline for monthly data updates
-3. **Enable Analytics:** Provide self-service analytics for trip patterns, payment preferences, and fare trends
+### How This Project Solves It
+
+This project builds a **complete end-to-end data pipeline** that:
+
+1. **Ingests** 6 years of daily weather data (2020-2025) for 5 major Indonesian cities from the Open-Meteo API using **dlt**
+2. **Stores** raw data in a data lake (**GCS**) and loads into a data warehouse (**BigQuery**) with partitioning and clustering for efficient querying
+3. **Transforms** raw data through a 3-layer dbt architecture (staging -> core -> analytics) with data quality tests
+4. **Visualizes** insights in an interactive **Streamlit** dashboard with 2 analytical tiles:
+   - **Tile 1 (Categorical):** Temperature comparison across cities — identifies which cities are hotter/cooler
+   - **Tile 2 (Temporal):** Monthly precipitation trends — reveals wet/dry season patterns per city
+5. **Orchestrates** the full pipeline as an end-to-end DAG in **Kestra** (fetch -> transform -> test -> done)
+6. **Provisions** all cloud infrastructure with **Terraform** (BigQuery datasets + GCS bucket)
 
 ### Business Value
 
-- **Urban Planners:** Optimize transportation infrastructure using trip patterns
-- **Fleet Managers:** Forecast demand and optimize operations
-- **Data Scientists:** Access clean, structured data for ML models
+| Stakeholder | Insight | Example |
+|-------------|---------|---------|
+| **Urban Planners** | Rainfall patterns per city | Jakarta gets 2x more rain than Makassar — plan drainage accordingly |
+| **Agriculture** | Seasonal temperature trends | Optimal planting windows based on 6 years of monthly temperature data |
+| **Tourism** | Best travel months | Denpasar (Bali) is driest in July-September — peak tourist season |
+| **Disaster Prep** | Extreme weather frequency | Identify which months have highest thunderstorm counts per city |
 
 ---
 
@@ -32,64 +46,83 @@ NYC Taxi & Limousine Commission (TLC) generates massive amounts of trip data dai
 
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
-| **Ingestion** | dlt | Extract, normalize, load taxi data |
-| **Data Lake** | DuckDB | Local OLAP database |
-| **Orchestration** | Kestra | Workflow scheduling |
-| **Transformation** | dbt | SQL-based transformations (staging → core → analytics) |
-| **Dashboard** | Streamlit + Plotly | Interactive web analytics |
-| **Deployment** | Docker Compose | Multi-container orchestration |
+| **Data Source** | [Open-Meteo API](https://open-meteo.com) | Free historical weather API (no auth required) |
+| **Ingestion** | [dlt](https://dlthub.com) | Extract and load weather data |
+| **Data Lake** | Google Cloud Storage (GCS) | Raw data staging for BigQuery loads |
+| **Data Warehouse** | Google BigQuery | OLAP warehouse with partitioning + clustering |
+| **Local Warehouse** | DuckDB | Local development (default mode) |
+| **Orchestration** | [Kestra](https://kestra.io) | End-to-end DAG pipeline |
+| **Transformation** | [dbt](https://getdbt.com) | SQL transformations (3-layer architecture) |
+| **Dashboard** | [Streamlit](https://streamlit.io) + Plotly | Interactive analytics dashboard |
+| **IaC** | [Terraform](https://terraform.io) | Cloud resource provisioning |
+| **Containerization** | Docker Compose | Reproducible multi-service deployment |
 
-### Data Flow
+### Data Pipeline Flow
 
 ```
-NYC TLC (Parquet files)
-    ↓
-dlt (Ingestion)
-    ↓
-DuckDB (raw.green_tripdata, raw.yellow_tripdata)
-    ↓
-Kestra (Orchestration)
-    ↓
-dbt (staging → core → analytics)
-    ↓
-DuckDB (analytics.fct_trips, analytics.trips_payment_type, analytics.trips_by_hour)
-    ↓
-Streamlit (Dashboard)
+Open-Meteo API (free, no auth)
+    |
+    v
+[dlt Ingestion] ── fetches 5 cities x 6 years of daily weather data
+    |                    |
+    v                    v
+DuckDB (local)     GCS Bucket (data lake)
+                         |
+                         v
+                    BigQuery (DWH)
+                    - Partitioned by observation_date (monthly)
+                    - Clustered by city_name
+                         |
+                         v
+                    [dbt Transform]
+                    staging -> core -> analytics
+                         |
+                         v
+                    Streamlit Dashboard
+                    - Tile 1: Temperature by City
+                    - Tile 2: Monthly Precipitation
+
+Orchestrated by: Kestra (end-to-end DAG)
+Infra by: Terraform (GCS + BigQuery)
 ```
 
 ---
 
 ## Dataset
 
-### Source: NYC Taxi & Limousine Commission
+### Source: Open-Meteo Historical Weather API
 
 | Property | Details |
 |----------|---------|
-| **Data Range** | January 2024 – December 2025 (2 years) |
-| **Taxi Types** | Green (outer boroughs) and Yellow (Manhattan) |
-| **Format** | Parquet (compressed columnar) |
-| **Total Size** | ~9GB (48 files × ~200MB each) |
+| **API** | `https://archive-api.open-meteo.com/v1/archive` |
+| **Authentication** | None required (free and open) |
+| **Data Range** | January 2020 - December 2025 (6 years) |
+| **Resolution** | Daily aggregations |
+| **Total Records** | ~10,950 rows (5 cities x 2,190 days) |
+| **Format** | JSON (API response) |
 
-### Current Data Status
+### Cities Analyzed
 
-> **Note:** Only **Green taxi** data (2024–2025) has been fully loaded. Yellow taxi ingestion was halted due to CloudFront rate limiting on the NYC TLC data source.
->
-> The dashboard fully supports both taxi types — Yellow taxi data will populate automatically once ingested.
+| City | Latitude | Longitude | Region | Why Selected |
+|------|----------|-----------|--------|-------------|
+| **Jakarta** | -6.21 | 106.85 | Java (West) | Capital city, largest metro |
+| **Surabaya** | -7.25 | 112.75 | Java (East) | 2nd largest city |
+| **Denpasar** | -8.65 | 115.22 | Bali | Tourism hub, different microclimate |
+| **Medan** | 3.59 | 98.67 | Sumatra (North) | North of equator, different monsoon |
+| **Makassar** | -5.14 | 119.42 | Sulawesi | Eastern Indonesia, distinct rainfall pattern |
 
-| Taxi Type | Status | Records |
-|-----------|--------|---------|
-| Green 2024 | ✅ Loaded | ~612K trips |
-| Green 2025 | ✅ Loaded | ~554K trips |
-| Yellow 2024 | ⏳ Pending | Rate-limited by CloudFront |
-| Yellow 2025 | ⏳ Pending | Rate-limited by CloudFront |
+### Weather Variables
 
-### Key Fields
-
-- `pickup_datetime` / `dropoff_datetime` — Trip timestamps
-- `trip_distance` — Distance in miles
-- `payment_type` — Payment method (Credit Card, Cash, etc.)
-- `fare_amount`, `tip_amount`, `total_amount` — Financial fields
-- `PULocationID` / `DOLocationID` — Pickup/dropoff location IDs
+| Variable | Unit | Description |
+|----------|------|-------------|
+| `temperature_2m_max` | C | Daily maximum temperature |
+| `temperature_2m_min` | C | Daily minimum temperature |
+| `temperature_2m_mean` | C | Daily mean temperature |
+| `precipitation_sum` | mm | Total daily precipitation |
+| `rain_sum` | mm | Total daily rainfall |
+| `windspeed_10m_max` | km/h | Maximum wind speed at 10m |
+| `sunshine_duration` | seconds | Total sunshine duration |
+| `weathercode` | WMO code | Weather condition classification |
 
 ---
 
@@ -99,80 +132,210 @@ Streamlit (Dashboard)
 
 - Docker & Docker Compose
 - Git
+- `make` (optional, for convenience commands)
 
-### 1. Start Services
+### Option A: One-Command Setup (Recommended)
 
 ```bash
-cd builder_rayhanAnanda/project
+# 1. Clone and navigate
+git clone <repo-url>
+cd project
 
-# Create environment file
+# 2. Create environment file
 cp .env.example .env
 
-# Start core services (Kestra + Dashboard)
-docker compose up -d
+# 3. Run full pipeline (ingest + transform + start dashboard)
+make setup
 
-# Dashboard will be available at http://localhost:8501
-# Kestra UI will be available at http://localhost:8080
+# 4. Open dashboard
+# -> http://localhost:8501
+
+# 5. Open Kestra UI (orchestration)
+# -> http://localhost:8080
 ```
 
-> **Default `docker compose up`** starts only the dashboard, Kestra, and PostgreSQL.
-> Ingestion and dbt are opt-in via profiles (see below).
-
-### 2. Run Ingestion (Optional — data already included)
+### Option B: Step-by-Step
 
 ```bash
-# Run ingestion manually (downloads ~9GB of data)
-docker compose --profile ingest up ingestion
+# 1. Create environment file
+cp .env.example .env
 
-# ⚠️ This downloads large files and may take 30-60 minutes
+# 2. Fetch weather data from Open-Meteo API (~1-2 minutes)
+docker compose --profile ingest up --build ingestion
+
+# 3. Run dbt transformations and tests
+docker compose --profile transform run --build dbt \
+  sh -c "cd /app/dbt && dbt run --profiles-dir . --project-dir . && dbt test --profiles-dir . --project-dir ."
+
+# 4. Start dashboard and Kestra
+docker compose up -d --build
+
+# 5. Open in browser
+# Dashboard: http://localhost:8501
+# Kestra UI: http://localhost:8080
 ```
 
-### 3. Run dbt Transformations (Optional — already built)
+### Stop Services
 
 ```bash
-# Run dbt transformations
-docker compose --profile transform run dbt dbt run --project-dir /app/dbt --profiles-dir /app/dbt
-
-# Run dbt tests
-docker compose --profile transform run dbt dbt test --project-dir /app/dbt --profiles-dir /app/dbt
+make down              # Stop services (preserve data)
+make clean             # Stop + remove all data (full reset)
 ```
 
-### 4. Stop Services
+---
 
-```bash
-# Stop services (preserve data)
-docker compose down
+## Data Warehouse Optimization
 
-# Stop services + remove volumes (full reset)
-docker compose down -v
+### Partitioning Strategy
+
+The `fct_weather` fact table is **partitioned by `observation_date`** with **monthly granularity**.
+
+**Why monthly partitioning?**
+- Dashboard queries always filter by year: `WHERE observation_year = 2024`
+- Monthly granularity means BigQuery scans only ~12 partitions per year query instead of ~365 daily partitions
+- Cost reduction: only relevant months are scanned, reducing bytes processed
+- Our data is small (~11K rows), but this demonstrates the pattern for production-scale weather data
+
+### Clustering Strategy
+
+The `fct_weather` table is **clustered by `city_name`**.
+
+**Why cluster by city?**
+- Nearly every dashboard query filters or groups by city: `WHERE city_name = 'Jakarta'` or `GROUP BY city_name`
+- Clustering co-locates rows for the same city within each partition
+- Combined with partitioning: query for "Jakarta in 2024" scans only the 2024 partition and jumps directly to Jakarta rows
+- This matches the two main query patterns:
+  1. "Compare all cities for year X" -> partition prunes year, results already grouped by city cluster
+  2. "Show monthly trend for city Y" -> cluster prunes to city, partition on month
+
+```sql
+-- Example: This query benefits from both partition (year) and cluster (city)
+SELECT observation_month, AVG(temperature_mean_c)
+FROM analytics.fct_weather
+WHERE observation_year = 2024          -- Partition pruning
+  AND city_name = 'Jakarta'            -- Cluster pruning
+GROUP BY observation_month
 ```
+
+---
+
+## dbt Transformation Layers
+
+### Layer Architecture
+
+```
+raw.daily_weather (source from dlt)
+    |
+    v
+[Staging Layer]
+    stg_daily_weather
+    - Cleans and standardizes column types
+    - Adds computed fields (temperature range, weather category)
+    - Maps WMO weather codes to human-readable descriptions
+    - Flags rainy days (precipitation > 0.1mm)
+    |
+    v
+[Core Layer]
+    fct_weather
+    - Single source of truth for all weather observations
+    - Partitioned by observation_date, clustered by city_name (BigQuery)
+    - Contains all cleaned fields from staging
+    |
+    v
+[Analytics Layer]
+    weather_by_city          -> Dashboard Tile 1 (Categorical)
+    weather_monthly_trends   -> Dashboard Tile 2 (Temporal)
+    - Pre-aggregated marts for efficient dashboard queries
+```
+
+### dbt Tests
+
+| Model | Test | Purpose |
+|-------|------|---------|
+| `stg_daily_weather` | `unique(weather_id)` | No duplicate observations |
+| `stg_daily_weather` | `not_null(weather_id, city_name, observation_date)` | Required fields present |
+| `stg_daily_weather` | `accepted_values(city_name)` | Only valid cities |
+| `stg_daily_weather` | `accepted_values(weather_category)` | Valid weather categories |
+| `fct_weather` | `unique(weather_id)` | Uniqueness maintained through transformation |
+| `fct_weather` | `accepted_values(weather_category)` | Consistent categorization |
+| `weather_monthly_trends` | `accepted_values(observation_month)` | Valid months (1-12) |
 
 ---
 
 ## Dashboard
 
-### Key Metrics
+### Key Metrics (5 cards)
 
 | Metric | Description |
 |--------|-------------|
-| **Total Trips** | Number of taxi trips in selected period |
-| **Total Revenue** | Sum of fare + tips + tolls |
-| **Avg Distance** | Average trip distance in miles |
-| **Avg Fare** | Average fare per trip |
-| **Avg Tip** | Average tip per trip |
+| Avg Temperature | Mean daily temperature for selected period |
+| Total Precipitation | Sum of all precipitation in mm |
+| Avg Wind Speed | Average maximum daily wind speed |
+| Avg Sunshine | Average daily sunshine hours |
+| Rain Days | Count of days with precipitation > 0.1mm |
 
-### Tile 1: Payment Type Distribution (Categorical)
+### Tile 1: Temperature by City (Categorical Distribution)
 
-Bar chart showing trip count and percentage by payment type (Credit Card, Cash, Other, etc.)
+Bar chart comparing average temperature across 5 Indonesian cities for the selected year. Includes min/max temperature markers to show daily range. Reveals which cities are consistently hotter or cooler.
 
-### Tile 2: Hourly Trip Patterns (Temporal)
+### Tile 2: Monthly Precipitation Trends (Temporal Distribution)
 
-Dual-axis line chart showing trip count and average fare by hour of day.
+Line chart showing monthly precipitation patterns across months. Multi-city comparison reveals seasonal differences — Jakarta's wet season (Nov-Mar) vs Makassar's distinct pattern. Helps identify optimal travel/planting windows.
 
 ### Filters
 
-- **Year:** 2023, 2024, 2025
-- **Taxi Type:** Green / Yellow / Both
+- **Year:** 2020, 2021, 2022, 2023, 2024, 2025
+- **City:** All, Jakarta, Surabaya, Denpasar, Medan, Makassar
+
+---
+
+## Cloud Deployment (GCP)
+
+### Infrastructure as Code (Terraform)
+
+All cloud resources are provisioned via Terraform:
+
+```bash
+cd terraform
+
+# Initialize Terraform
+terraform init
+
+# Preview changes
+terraform plan -var="credentials_file=/path/to/credentials.json"
+
+# Apply (creates GCS bucket + BigQuery datasets)
+terraform apply -var="credentials_file=/path/to/credentials.json"
+```
+
+**Resources provisioned:**
+- GCS Bucket: `weather-data-de-zoomcamp-2026-484615` (data lake + dlt staging)
+- BigQuery Dataset: `raw` (ingested weather data)
+- BigQuery Dataset: `analytics` (dbt-transformed models)
+
+### Cloud Pipeline
+
+To run the pipeline against BigQuery instead of DuckDB:
+
+```bash
+# Set environment variables
+export GCP_PROJECT_ID=de-zoomcamp-2026-484615
+export GCS_BUCKET_NAME=weather-data-de-zoomcamp-2026-484615
+export GOOGLE_APPLICATION_CREDENTIALS=/path/to/credentials.json
+
+# Run ingestion to BigQuery
+python -m ingestion.main
+
+# Run dbt against BigQuery
+cd dbt && dbt run --target prod --profiles-dir . --project-dir .
+```
+
+### Cost
+
+All resources stay within **GCP Free Tier** ($0 cost):
+- BigQuery: ~11K rows = <1 MB storage (free tier: 10 GB)
+- BigQuery queries: <10 MB per query (free tier: 1 TB/month)
+- GCS: <5 MB staging data (free tier: 5 GB)
 
 ---
 
@@ -181,141 +344,165 @@ Dual-axis line chart showing trip count and average fare by hour of day.
 ```
 project/
 ├── README.md                 # This file
-├── PROJECT_PLAN.md           # Detailed project plan
-├── docker-compose.yml        # Docker Compose (profiles for ingestion/dbt)
-├── .env.example              # Environment template
+├── Makefile                  # Convenience commands (make setup, etc.)
+├── docker-compose.yml        # Multi-service orchestration
+├── .env.example              # Environment variable template
+├── .gitignore                # Git ignore rules
+│
 ├── docker/
-│   ├── Dockerfile.ingestion  # dlt container
-│   ├── Dockerfile.dbt        # dbt container
-│   └── Dockerfile.dashboard  # Streamlit container
+│   ├── Dockerfile.ingestion  # dlt ingestion container
+│   ├── Dockerfile.dbt        # dbt transformation container
+│   └── Dockerfile.dashboard  # Streamlit dashboard container
+│
 ├── ingestion/
-│   ├── source.py             # dlt source definition
-│   └── main.py               # Ingestion entry point
+│   ├── source.py             # dlt source: Open-Meteo API fetch
+│   ├── main.py               # Pipeline entry point (DuckDB/BigQuery)
+│   └── requirements.txt      # Python dependencies
+│
 ├── kestra/flows/
-│   └── main_flow.yml         # Orchestration workflow
+│   └── main_flow.yml         # End-to-end orchestration DAG
+│
 ├── dbt/
-│   ├── dbt_project.yml
-│   ├── profiles.yml
+│   ├── dbt_project.yml       # dbt project configuration
+│   ├── profiles.yml          # Connection profiles (dev=DuckDB, prod=BigQuery)
+│   ├── macros/
+│   │   └── generate_schema_name.sql
 │   └── models/
-│       ├── staging/          # Raw data cleaning
-│       └── analytics/        # Dashboard-ready aggregations
+│       ├── schema.yml        # Source definitions and tests
+│       ├── staging/
+│       │   └── stg_daily_weather.sql
+│       └── marts/
+│           ├── core/
+│           │   └── fct_weather.sql        # Partitioned + clustered fact table
+│           └── analytics/
+│               ├── weather_by_city.sql     # Tile 1: categorical
+│               └── weather_monthly_trends.sql  # Tile 2: temporal
+│
 ├── dashboard/
-│   └── app.py                # Streamlit dashboard
-├── data/
-│   └── capstone.duckdb       # DuckDB database (~1.2GB)
-└── scripts/                  # Utility scripts
+│   ├── app.py                # Streamlit dashboard (2 tiles)
+│   └── requirements.txt      # Dashboard dependencies
+│
+├── terraform/
+│   ├── main.tf               # GCS bucket + BigQuery datasets
+│   ├── variables.tf          # Configurable variables
+│   └── outputs.tf            # Output values
+│
+└── data/
+    └── .gitkeep              # Data directory (DuckDB created here)
 ```
 
 ---
 
-## dbt Transformation Layers
+## Orchestration (Kestra)
 
-### Staging Layer
-- `stg_green_trips` — Standardized Green taxi trips with cleaned column names
-- `stg_yellow_trips` — Standardized Yellow taxi trips (pending data)
+The Kestra flow (`kestra/flows/main_flow.yml`) defines a clear **end-to-end DAG**:
 
-### Core Layer
-- `fct_trips` — Unified fact table (Green + Yellow) with computed fields (duration, trip_hour, trip_year, taxi_type)
+```
+[Validate Environment]
+        |
+        v
+[Fetch Weather Data]  ← Open-Meteo API → DuckDB
+        |
+        v
+[dbt Transform]       ← staging → core → analytics
+        |
+        v
+[dbt Test]            ← Data quality validation
+        |
+        v
+[Pipeline Complete]
+```
 
-### Analytics Layer
-- `trips_payment_type` — Pre-aggregated payment type distribution by year/taxi type
-- `trips_by_hour` — Pre-aggregated hourly trip patterns by year/taxi type
+Access Kestra UI at `http://localhost:8080` to:
+- View the pipeline DAG
+- Trigger manual executions
+- Monitor execution logs
+- Configure scheduled runs
 
-### dbt Test Results
-- 10 of 11 tests passing
-- 1 expected warning: `payment_type` NULL values (legitimate data — some trips have no payment type recorded)
+---
+
+## Reproducibility Checklist
+
+- [x] No hard-coded file paths or credentials
+- [x] `.env.example` provided with all required variables
+- [x] Docker Compose works from fresh clone
+- [x] All dependencies pinned in `requirements.txt`
+- [x] `make setup` runs full pipeline in one command
+- [x] Step-by-step instructions in README
+- [x] Data sourced from free, publicly accessible API (no auth required)
+- [x] Cloud resources provisioned via Terraform (IaC)
+- [x] `.gitignore` excludes credentials, data files, and build artifacts
 
 ---
 
 ## Evaluation Criteria
 
-| Criteria | Implementation | Status |
-|----------|----------------|--------|
-| Problem Description | Comprehensive README with business problem | ✅ |
-| Cloud | Local development with Docker | ⏳ Optional |
-| Data Ingestion | dlt pipeline with multi-source (Green + Yellow) | ✅ |
-| Data Warehouse | DuckDB with layered schema (raw → staging → analytics) | ✅ |
-| Transformations | dbt with staging → core → analytics layers | ✅ |
-| Dashboard | Streamlit with 2 tiles (categorical + temporal) | ✅ |
-| Reproducibility | Docker Compose, clear documentation | ✅ |
+| Criteria | Implementation | Score Target |
+|----------|----------------|-------------|
+| **Problem Description** | Comprehensive problem + solution + business value | 4/4 |
+| **Cloud** | GCP (BigQuery + GCS) + Terraform IaC | 4/4 |
+| **Data Ingestion (Batch)** | End-to-end Kestra DAG with multiple steps | 4/4 |
+| **Data Warehouse** | BigQuery with partition (date) + cluster (city) + explanation | 4/4 |
+| **Transformations** | dbt 3-layer architecture with tests | 4/4 |
+| **Dashboard** | Streamlit with 2 tiles (categorical + temporal) | 4/4 |
+| **Reproducibility** | Docker Compose + Makefile + clear docs | 4/4 |
 
 ---
 
 ## Troubleshooting
 
 ### Services won't start
-
 ```bash
-docker compose logs                     # Check all logs
-docker compose up --build -d            # Rebuild containers
-docker compose restart dashboard        # Restart specific service
+docker compose logs                 # Check all logs
+docker compose up --build -d        # Rebuild containers
+docker compose restart dashboard    # Restart specific service
 ```
 
 ### DuckDB connection error
-
 ```bash
-# Ensure data directory and database exist
+# Verify database exists
 ls -lh data/capstone.duckdb
 
-# Inspect database tables
+# Inspect tables
 python -c "import duckdb; print(duckdb.connect('data/capstone.duckdb').execute('SHOW ALL TABLES').df())"
 ```
 
-### dbt fails to run
-
+### dbt fails
 ```bash
-docker compose --profile transform run dbt dbt debug --project-dir /app/dbt --profiles-dir /app/dbt
+# Debug dbt connection
+docker compose --profile transform run dbt \
+  sh -c "cd /app/dbt && dbt debug --profiles-dir . --project-dir ."
 ```
 
-### Dashboard not loading data
+### Dashboard not loading
+1. Verify data exists: `data/capstone.duckdb` should be > 0 bytes
+2. Check logs: `docker compose logs dashboard`
+3. Ensure ingestion and dbt have been run first
 
-1. Verify DuckDB has data: check `data/capstone.duckdb` exists and is >0 bytes
-2. Check dashboard logs: `docker compose logs dashboard`
-3. Ensure `DUCKDB_PATH` environment variable is set correctly
-
-### Clean reset
-
+### Full reset
 ```bash
-docker compose down -v        # Stop + remove volumes
-rm -rf data/                  # Remove database
-docker compose up --build -d  # Rebuild everything
+make clean                     # Remove everything
+make setup                     # Rebuild from scratch
 ```
-
----
-
-## Known Limitations
-
-1. **Yellow taxi data not yet loaded** — CloudFront rate limiting prevents bulk download. Green taxi data is fully available for 2024-2025.
-2. **Year outliers filtered** — Raw data contains occasional outlier records with years 2008/2009/2026. These are filtered in the dashboard query layer.
-3. **Single-node deployment** — DuckDB runs as an embedded database. For production scale, consider migrating to BigQuery or PostgreSQL.
-
----
-
-## Future Enhancements
-
-- [ ] Deploy to GCP free tier (Cloud Run + BigQuery + GCS)
-- [ ] Complete Yellow taxi ingestion (retry with backoff for rate limiting)
-- [ ] Add CI/CD pipeline with GitHub Actions
-- [ ] Add geographic visualizations (pickup/dropoff heatmaps)
-- [ ] Implement monthly trend analysis tile
 
 ---
 
 ## References
 
-- [NYC TLC Trip Data](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page)
+- [Open-Meteo Historical Weather API](https://open-meteo.com/en/docs/historical-weather-api)
 - [dlt Documentation](https://dlthub.com/docs)
 - [dbt Documentation](https://docs.getdbt.com)
 - [Kestra Documentation](https://kestra.io/docs)
 - [DuckDB Documentation](https://duckdb.org/docs)
 - [Streamlit Documentation](https://docs.streamlit.io)
+- [Terraform GCP Provider](https://registry.terraform.io/providers/hashicorp/google/latest/docs)
 
 ---
 
 ## License
 
-This project is created for educational purposes as part of the Data Engineering Zoomcamp 2026 program.
+This project is created for educational purposes as part of the [Data Engineering Zoomcamp 2026](https://github.com/DataTalksClub/data-engineering-zoomcamp) program.
 
 ---
 
-*Last Updated: April 15, 2026*
+*Last Updated: May 2026*

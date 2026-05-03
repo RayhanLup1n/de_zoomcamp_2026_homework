@@ -34,14 +34,16 @@ ENV/
 # dlt
 .dlt/
 *.duckdb
+*.duckdb.wal
 
 # dbt
 dbt/target/
 dbt/dbt_packages/
+dbt/.user.yml
 
-# Data files (optional - uncomment if you want to ignore data)
-# data/
-# !data/.gitkeep
+# Data files
+data/
+!data/.gitkeep
 
 # IDEs
 .vscode/
@@ -56,6 +58,8 @@ Thumbs.db
 
 # Logs
 *.log
+kestra/logs/
+kestra/storage/
 
 # Terraform
 terraform/.terraform/
@@ -63,7 +67,11 @@ terraform/.terraform.lock.hcl
 terraform/*.tfstate
 terraform/*.tfstate.backup
 terraform/*.tfplan
+terraform/terraform.exe
 
-# GCP Credentials
-*.json
-!dbt/dbt_project.yml
+# GCP Service Account Credentials (NEVER commit these)
+*credentials*.json
+*service-account*.json
+
+# Streamlit
+.streamlit/secrets.toml

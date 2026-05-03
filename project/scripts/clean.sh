@@ -1,38 +1,30 @@
 #!/bin/bash
 
-# Capstone Project Clean Script
+# Indonesia Weather Analytics - Clean Script
 # Removes all containers, volumes, and data
 
 set -e
 
 echo "========================================="
-echo "  Cleaning NYC Taxi Analytics Project"
+echo "  Cleaning Indonesia Weather Project"
 echo "========================================="
 echo ""
 
-# Stop and remove containers
-echo "Stopping and removing containers..."
-docker-compose down
-
-# Remove volumes
-echo "Removing volumes..."
-docker-compose down -v
-
-# Clear data directory (optional - ask first)
+# Stop and remove containers + volumes
+echo "Stopping containers and removing volumes..."
+docker compose down -v
+echo "✓ Containers and volumes removed"
 echo ""
-read -p "Do you want to remove data/capstone.duckdb? (y/N): " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    rm -f data/capstone.duckdb
-    echo "✓ Data file removed"
-else
-    echo "✓ Data file preserved"
-fi
+
+# Remove data files
+echo "Removing data files..."
+rm -f data/capstone.duckdb data/capstone.duckdb.wal
+echo "✓ Data files removed"
 
 echo ""
 echo "========================================="
 echo "  Clean Complete!"
 echo "========================================="
 echo ""
-echo "To restart: docker-compose up -d"
+echo "To restart: make setup"
 echo ""

@@ -1,10 +1,11 @@
-name: 'nyc_taxi_analytics'
+name: 'indonesia_weather_analytics'
 version: '1.0.0'
 config-version: 2
 
-profile: 'nyc_taxi_analytics'
+profile: 'indonesia_weather_analytics'
 
 model-paths: ["models"]
+macro-paths: ["macros"]
 seed-paths: ["seeds"]
 test-paths: ["tests"]
 

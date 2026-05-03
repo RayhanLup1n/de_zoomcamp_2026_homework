@@ -1,7 +1,12 @@
 """
-NYC Taxi Analytics Dashboard
+Indonesia Weather Analytics Dashboard
 
-Streamlit dashboard for visualizing NYC taxi trip data.
+Streamlit dashboard for visualizing Indonesian weather patterns
+across 5 major cities using data from Open-Meteo API.
+
+Supports dual-mode:
+  - Local: DuckDB (default)
+  - Cloud: BigQuery (when GCP_PROJECT_ID is set)
 """
 
 import os
@@ -10,19 +15,27 @@ import duckdb
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from google.cloud import bigquery
-from google.oauth2 import service_account
+
+# Optional: BigQuery support for cloud mode
+try:
+    from google.cloud import bigquery
+    from google.oauth2 import service_account
+
+    HAS_BIGQUERY = True
+except ImportError:
+    HAS_BIGQUERY = False
 
 # Page configuration
 st.set_page_config(
-    page_title="NYC Taxi Analytics",
-    page_icon="🚕",
+    page_title="Indonesia Weather Analytics",
+    page_icon="🌤️",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
 # Custom CSS
-st.markdown("""
+st.markdown(
+    """
 <style>
     .main-header {
         font-size: 2.5rem;
@@ -31,25 +44,15 @@ st.markdown("""
         text-align: center;
         margin-bottom: 1rem;
     }
-    .metric-card {
-        background-color: #f0f2f6;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        margin: 0.5rem 0;
-    }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 
 # ──────────────────────────────────────────────────────
 # Database Connection Logic
 # ──────────────────────────────────────────────────────
-
-def get_gcp_config():
-    """Get GCP configuration from environment."""
-    project_id = os.environ.get("GCP_PROJECT_ID")
-    credentials_path = os.environ.get("LOCAL_GCP_CREDENTIALS") or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
-    return project_id, credentials_path
 
 
 def get_duckdb_path():
@@ -58,17 +61,16 @@ def get_duckdb_path():
 
 
 def is_cloud_mode() -> bool:
-    """Check if we should use BigQuery (Cloud Mode)."""
+    """Check if BigQuery (Cloud Mode) should be used."""
+    if not HAS_BIGQUERY:
+        return False
     project_id = os.environ.get("GCP_PROJECT_ID")
     if not project_id:
         return False
-    
-    # On Cloud Run, ADC is available automatically via the service identity
+    # On Cloud Run, ADC is available automatically
     if os.environ.get("K_SERVICE"):
         return True
-    
-    # Local development: check for explicit credentials file
-    _, creds_path = get_gcp_config()
+    creds_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
     return bool(creds_path and os.path.exists(creds_path))
 
 
@@ -77,508 +79,387 @@ def get_bigquery_client():
     """Initialize and cache BigQuery client."""
     if not is_cloud_mode():
         return None
-    
-    project_id, creds_path = get_gcp_config()
-    
-    # On Cloud Run: use Application Default Credentials (no file needed)
+    project_id = os.environ.get("GCP_PROJECT_ID")
+    creds_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
     if os.environ.get("K_SERVICE") or not creds_path or not os.path.exists(creds_path):
         return bigquery.Client(project=project_id)
-    
-    # Local development: use explicit credentials file
     credentials = service_account.Credentials.from_service_account_file(creds_path)
     return bigquery.Client(credentials=credentials, project=project_id)
 
 
-def check_database_exists() -> tuple[bool, str]:
-    """Check if any database (BQ or DuckDB) is accessible."""
+def check_database_exists() -> tuple:
+    """Check if any database (BigQuery or DuckDB) is accessible."""
     if is_cloud_mode():
         try:
             client = get_bigquery_client()
-            # Just try to list datasets to verify connection
             list(client.list_datasets(max_results=1))
             return True, "Connected to BigQuery"
         except Exception as e:
-            return False, f"Cloud Mode error: {e}"
+            return False, f"BigQuery error: {e}"
     else:
         db_path = get_duckdb_path()
         if os.path.exists(db_path):
             try:
                 con = duckdb.connect(db_path, read_only=True)
                 con.close()
-                return True, "Connected to local DuckDB"
+                return True, "Connected to DuckDB"
             except Exception as e:
-                return False, f"DuckDB connection error: {e}"
-        return False, "No database found (Cloud or Local)"
+                return False, f"DuckDB error: {e}"
+        return False, "Database not found. Run `make setup` first."
 
 
-@st.cache_data(ttl=600)  # Cache results for 10 minutes
-def query_data(query: str, params: list = None) -> pd.DataFrame:
-    """Execute query on either BigQuery or DuckDB based on mode."""
+@st.cache_data(ttl=600)
+def query_data(query: str) -> pd.DataFrame:
+    """Execute query on BigQuery or DuckDB based on mode."""
     if is_cloud_mode():
         try:
             client = get_bigquery_client()
-            # BigQuery uses named parameters (@param) or format strings
-            # For simplicity, we'll replace ? with @p1, @p2 etc. if needed
-            # or just use the query as is if it's already formatted.
-            
-            # Convert ? placeholders to @p1, @p2 etc for BigQuery
-            bq_query = query
-            job_config = None
-            if params:
-                for i in range(len(params)):
-                    bq_query = bq_query.replace("?", f"@p{i+1}", 1)
-                
-                query_params = [
-                    bigquery.ScalarQueryParameter(f"p{i+1}", 
-                        "INT64" if isinstance(params[i], int) else "STRING", 
-                        params[i])
-                    for i in range(len(params))
-                ]
-                job_config = bigquery.QueryJobConfig(query_parameters=query_params)
-            
-            df = client.query(bq_query, job_config=job_config).to_dataframe()
-            return df
+            return client.query(query).to_dataframe()
         except Exception as e:
-            st.error(f"Error querying BigQuery: {e}")
+            st.error(f"BigQuery query error: {e}")
             return pd.DataFrame()
     else:
         try:
             db_path = get_duckdb_path()
-            con = duckdb.connect(db_path)
-            df = con.execute(query, params or []).df()
+            con = duckdb.connect(db_path, read_only=True)
+            df = con.execute(query).df()
             con.close()
             return df
         except Exception as e:
-            st.error(f"Error querying DuckDB: {e}")
+            st.error(f"DuckDB query error: {e}")
             return pd.DataFrame()
 
 
-@st.cache_data(ttl=300, show_spinner=False)
-def get_schemas() -> list:
-    """Get all tables available in the current mode with caching."""
-    if is_cloud_mode():
-        try:
-            client = get_bigquery_client()
-            datasets = ["raw", "analytics"]
-            all_tables = []
-            for ds in datasets:
-                tables = client.list_tables(ds)
-                all_tables.extend([f"{ds}.{t.table_id}" for t in tables])
-            return all_tables
-        except Exception:
-            return []
-    else:
-        try:
-            db_path = get_duckdb_path()
-            con = duckdb.connect(db_path)
-            tables = con.execute("SHOW ALL TABLES").df()
-            con.close()
-            return [f"{row['schema']}.{row['name']}" for _, row in tables.iterrows()]
-        except Exception:
-            return []
-
-
 # ──────────────────────────────────────────────────────
-# Data Fetching Logic (with caching)
+# Data Fetching Functions
 # ──────────────────────────────────────────────────────
+
 
 @st.cache_data(ttl=300, show_spinner="Loading available years...")
 def get_available_years() -> list:
-    """Get available years in database (filtered to valid range)."""
+    """Get available years from the fact table."""
     query = """
-        SELECT DISTINCT trip_year
-        FROM analytics.fct_trips
-        WHERE trip_year BETWEEN 2019 AND 2025
-        ORDER BY trip_year DESC
+        SELECT DISTINCT observation_year
+        FROM analytics.fct_weather
+        ORDER BY observation_year DESC
     """
     df = query_data(query)
-    return df['trip_year'].tolist() if not df.empty else []
+    return df["observation_year"].tolist() if not df.empty else []
 
 
 @st.cache_data(ttl=300, show_spinner="Loading metrics...")
-def get_total_metrics(year: int, taxi_type: str) -> dict:
-    """Get summary metrics for selected filters with caching."""
-    params = [year, taxi_type]
-
-    query = """
+def get_key_metrics(year: int, city: str) -> dict:
+    """Get summary metrics for the selected year and city."""
+    city_filter = "" if city == "All" else f"AND city_name = '{city}'"
+    query = f"""
         SELECT
-            COUNT(*) AS total_trips,
-            COALESCE(SUM(fare_amount + tip_amount + tolls_amount), 0) AS total_revenue,
-            COALESCE(AVG(trip_distance), 0) AS avg_distance,
-            COALESCE(AVG(fare_amount), 0) AS avg_fare,
-            COALESCE(AVG(tip_amount), 0) AS avg_tip
-        FROM analytics.fct_trips
-        WHERE trip_year = ?
-            AND taxi_type = ?
+            COUNT(*) AS total_observations,
+            ROUND(AVG(temperature_mean_c), 1) AS avg_temperature,
+            ROUND(SUM(precipitation_mm), 1) AS total_precipitation,
+            ROUND(AVG(wind_speed_max_kmh), 1) AS avg_wind_speed,
+            ROUND(AVG(sunshine_hours), 1) AS avg_sunshine,
+            SUM(CASE WHEN is_rainy_day THEN 1 ELSE 0 END) AS rain_days
+        FROM analytics.fct_weather
+        WHERE observation_year = {year}
+            {city_filter}
     """
-    df = query_data(query, params)
-
+    df = query_data(query)
     if df.empty:
         return {
-            'total_trips': 0,
-            'total_revenue': 0.0,
-            'avg_distance': 0.0,
-            'avg_fare': 0.0,
-            'avg_tip': 0.0
+            "total_observations": 0,
+            "avg_temperature": 0.0,
+            "total_precipitation": 0.0,
+            "avg_wind_speed": 0.0,
+            "avg_sunshine": 0.0,
+            "rain_days": 0,
         }
-
     return df.iloc[0].to_dict()
 
 
-def plot_payment_distribution(df: pd.DataFrame, year: int, taxi_type: str) -> go.Figure:
-    """Create payment type distribution chart (Tile 1)."""
+# ──────────────────────────────────────────────────────
+# Visualization Functions
+# ──────────────────────────────────────────────────────
+
+
+def plot_temperature_by_city(year: int) -> go.Figure:
+    """Tile 1: Average Temperature by City (Categorical Distribution).
+
+    Shows how temperature patterns differ across Indonesian cities
+    for the selected year. Includes min/max markers for range.
+    """
+    query = f"""
+        SELECT
+            city_name,
+            avg_temperature_c,
+            min_temperature_c,
+            max_temperature_c,
+            rainy_days,
+            avg_sunshine_hours
+        FROM analytics.weather_by_city
+        WHERE observation_year = {year}
+        ORDER BY avg_temperature_c DESC
+    """
+    df = query_data(query)
+
     if df.empty:
         fig = go.Figure()
         fig.update_layout(
-            title=f"Payment Type Distribution - {taxi_type} {year}",
-            annotations=[{
-                'text': 'No data available',
-                'xref': 'paper',
-                'yref': 'paper',
-                'x': 0.5,
-                'y': 0.5,
-                'showarrow': False
-            }]
+            title=f"Temperature by City ({year})",
+            annotations=[
+                {
+                    "text": "No data available",
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x": 0.5,
+                    "y": 0.5,
+                    "showarrow": False,
+                }
+            ],
         )
         return fig
-
-    fig = px.bar(
-        df,
-        x='payment_type_name',
-        y='trip_count',
-        text='percentage',
-        title=f"Payment Type Distribution - {taxi_type} {year}",
-        labels={
-            'payment_type_name': 'Payment Type',
-            'trip_count': 'Trip Count',
-            'percentage': 'Percentage'
-        },
-        color='payment_type_name'
-    )
-
-    fig.update_traces(
-        texttemplate='%{y:,.0f}<br>%{text:.1f}%',
-        textposition='outside'
-    )
-
-    fig.update_layout(
-        xaxis_title='Payment Type',
-        yaxis_title='Trip Count',
-        showlegend=False,
-        height=400
-    )
-
-    return fig
-
-
-def plot_hourly_patterns(df: pd.DataFrame, year: int, taxi_type: str) -> go.Figure:
-    """Create hourly trip pattern chart (Tile 2)."""
-    if df.empty:
-        fig = go.Figure()
-        fig.update_layout(
-            title=f"Hourly Trip Patterns - {taxi_type} {year}",
-            annotations=[{
-                'text': 'No data available',
-                'xref': 'paper',
-                'yref': 'paper',
-                'x': 0.5,
-                'y': 0.5,
-                'showarrow': False
-            }]
-        )
-        return fig
-
-    # Aggregate by hour across all days
-    hourly_data = df.groupby('trip_hour').agg({
-        'trip_count': 'sum',
-        'avg_fare_amount': 'mean',
-        'avg_trip_distance': 'mean'
-    }).reset_index()
 
     fig = go.Figure()
 
-    # Add line for trip count
-    fig.add_trace(go.Scatter(
-        x=hourly_data['trip_hour'],
-        y=hourly_data['trip_count'],
-        mode='lines+markers',
-        name='Trip Count',
-        line=dict(color='#1f77b4', width=3),
-        marker=dict(size=8)
-    ))
+    # Bar for average temperature
+    fig.add_trace(
+        go.Bar(
+            x=df["city_name"],
+            y=df["avg_temperature_c"],
+            name="Avg Temp (°C)",
+            marker_color="#ff7f0e",
+            text=df["avg_temperature_c"].apply(lambda x: f"{x}°C"),
+            textposition="outside",
+        )
+    )
 
-    # Add secondary y-axis for average fare
-    fig.add_trace(go.Scatter(
-        x=hourly_data['trip_hour'],
-        y=hourly_data['avg_fare_amount'],
-        mode='lines+markers',
-        name='Avg Fare ($)',
-        line=dict(color='#ff7f0e', width=3, dash='dash'),
-        marker=dict(size=8),
-        yaxis='y2'
-    ))
+    # Max temperature markers
+    fig.add_trace(
+        go.Scatter(
+            x=df["city_name"],
+            y=df["max_temperature_c"],
+            mode="markers",
+            name="Max Temp",
+            marker=dict(color="#d62728", size=12, symbol="triangle-up"),
+        )
+    )
+
+    # Min temperature markers
+    fig.add_trace(
+        go.Scatter(
+            x=df["city_name"],
+            y=df["min_temperature_c"],
+            mode="markers",
+            name="Min Temp",
+            marker=dict(color="#1f77b4", size=12, symbol="triangle-down"),
+        )
+    )
 
     fig.update_layout(
-        title=f"Hourly Trip Patterns - {taxi_type} {year}",
-        xaxis_title='Hour of Day',
-        yaxis_title='Trip Count',
-        yaxis2=dict(
-            title='Average Fare ($)',
-            overlaying='y',
-            side='right'
-        ),
-        legend=dict(
-            orientation='h',
-            yanchor='bottom',
-            y=1.02
-        ),
-        height=400
+        title=f"Temperature Comparison by City ({year})",
+        xaxis_title="City",
+        yaxis_title="Temperature (°C)",
+        height=450,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02),
     )
 
     return fig
+
+
+def plot_monthly_precipitation(year: int, city: str) -> go.Figure:
+    """Tile 2: Monthly Precipitation Trends (Temporal Distribution).
+
+    Shows how precipitation patterns change across months
+    for the selected year and city.
+    """
+    city_filter = "" if city == "All" else f"AND city_name = '{city}'"
+    query = f"""
+        SELECT
+            observation_month,
+            city_name,
+            total_precipitation_mm,
+            avg_temperature_c,
+            rainy_days
+        FROM analytics.weather_monthly_trends
+        WHERE observation_year = {year}
+            {city_filter}
+        ORDER BY city_name, observation_month
+    """
+    df = query_data(query)
+
+    if df.empty:
+        fig = go.Figure()
+        fig.update_layout(
+            title=f"Monthly Precipitation ({year})",
+            annotations=[
+                {
+                    "text": "No data available",
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x": 0.5,
+                    "y": 0.5,
+                    "showarrow": False,
+                }
+            ],
+        )
+        return fig
+
+    month_names = {
+        1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 5: "May", 6: "Jun",
+        7: "Jul", 8: "Aug", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec",
+    }
+    df["month_name"] = df["observation_month"].map(month_names)
+
+    fig = px.line(
+        df,
+        x="month_name",
+        y="total_precipitation_mm",
+        color="city_name",
+        title=f"Monthly Precipitation Trends ({year})",
+        labels={
+            "month_name": "Month",
+            "total_precipitation_mm": "Total Precipitation (mm)",
+            "city_name": "City",
+        },
+        markers=True,
+        category_orders={
+            "month_name": ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                           "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        },
+    )
+
+    fig.update_layout(
+        xaxis_title="Month",
+        yaxis_title="Precipitation (mm)",
+        height=450,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02),
+    )
+
+    return fig
+
+
+# ──────────────────────────────────────────────────────
+# Main Application
+# ──────────────────────────────────────────────────────
 
 
 def main():
     """Main dashboard application."""
     # Header
-    st.markdown('<div class="main-header">🚕 NYC Taxi Analytics Dashboard</div>',
-                unsafe_allow_html=True)
+    st.markdown(
+        '<div class="main-header">🌤️ Indonesia Weather Analytics Dashboard</div>',
+        unsafe_allow_html=True,
+    )
 
-    # Sidebar
+    # ── Sidebar ──
     with st.sidebar:
         st.header("⚙️ Configuration")
 
-        # Check database
         db_exists, db_status = check_database_exists()
 
         if db_exists:
-            st.success(f"✅ Database: Connected")
-
-            # Get all tables/schemas
-            all_tables = get_schemas()
-
-            if all_tables:
-                st.info(f"📊 Tables found: {len(all_tables)}")
-                with st.expander("View all tables"):
-                    for table in all_tables:
-                        st.text(f"- {table}")
-            else:
-                st.warning("⚠️ No tables found in database")
+            st.success(f"✅ {db_status}")
         else:
-            st.error(f"❌ Database {db_status}")
-            st.info("Please run the ingestion pipeline first")
+            st.error(f"❌ {db_status}")
+            st.info("Please run the pipeline first:\n```\nmake setup\n```")
             return
 
         st.divider()
-
-        # Get available years
-        try:
-            available_years = get_available_years()
-        except Exception:
-            available_years = []
-
-        if not available_years:
-            st.warning("⚠️ No data available. Please run ingestion pipeline.")
-            st.info("The ingestion container should load data into DuckDB.")
-            return
 
         # Year selector
-        selected_year = st.selectbox(
-            "Select Year",
-            options=available_years,
-            index=0
-        )
+        available_years = get_available_years()
+        if not available_years:
+            st.warning("No data available. Run ingestion + dbt first.")
+            return
 
-        # Taxi type selector
-        taxi_types = ['Green', 'Yellow', 'Both']
-        selected_taxi_type = st.selectbox(
-            "Taxi Type",
-            options=taxi_types,
-            index=0
-        )
+        selected_year = st.selectbox("Select Year", options=available_years, index=0)
+
+        # City selector
+        cities = ["All", "Jakarta", "Surabaya", "Denpasar", "Medan", "Makassar"]
+        selected_city = st.selectbox("Select City", options=cities, index=0)
 
         st.divider()
 
-        # Info
-        st.info(f"""
+        st.info(
+            f"""
         **Dashboard Info**
         - Year: {selected_year}
-        - Taxi Type: {selected_taxi_type}
-        - Mode: {"☁️ Cloud (BigQuery)" if is_cloud_mode() else "🏠 Local (DuckDB)"}
-        """)
+        - City: {selected_city}
+        - Mode: {"☁️ BigQuery" if is_cloud_mode() else "🏠 DuckDB"}
+        """
+        )
 
-        st.divider()
-
-        # Refresh button
         if st.button("🔄 Refresh Data"):
+            st.cache_data.clear()
             st.rerun()
 
-    # Metrics row
+    # ── Key Metrics Row ──
     st.subheader("📊 Key Metrics")
-    metrics_cols = st.columns(5)
+    metrics = get_key_metrics(selected_year, selected_city)
 
-    if selected_taxi_type == 'Both':
-        # Get metrics for both taxi types
-        green_metrics = get_total_metrics(selected_year, 'Green')
-        yellow_metrics = get_total_metrics(selected_year, 'Yellow')
-
-        total_trips = green_metrics['total_trips'] + yellow_metrics['total_trips']
-        total_revenue = green_metrics['total_revenue'] + yellow_metrics['total_revenue']
-
-        # For averages, only include non-zero values to avoid skewing
-        g_trips = green_metrics['total_trips']
-        y_trips = yellow_metrics['total_trips']
-        denom = max(g_trips + y_trips, 1)
-        avg_distance = (green_metrics['avg_distance'] * g_trips + yellow_metrics['avg_distance'] * y_trips) / denom
-        avg_fare = (green_metrics['avg_fare'] * g_trips + yellow_metrics['avg_fare'] * y_trips) / denom
-        avg_tip = (green_metrics['avg_tip'] * g_trips + yellow_metrics['avg_tip'] * y_trips) / denom
-    else:
-        metrics = get_total_metrics(selected_year, selected_taxi_type)
-        total_trips = metrics['total_trips']
-        total_revenue = metrics['total_revenue']
-        avg_distance = metrics['avg_distance']
-        avg_fare = metrics['avg_fare']
-        avg_tip = metrics['avg_tip']
-
-    with metrics_cols[0]:
-        st.metric("Total Trips", f"{total_trips:,}")
-    with metrics_cols[1]:
-        st.metric("Total Revenue", f"${total_revenue:,.0f}")
-    with metrics_cols[2]:
-        st.metric("Avg Distance", f"{avg_distance:.2f} mi")
-    with metrics_cols[3]:
-        st.metric("Avg Fare", f"${avg_fare:.2f}")
-    with metrics_cols[4]:
-        st.metric("Avg Tip", f"${avg_tip:.2f}")
+    cols = st.columns(5)
+    with cols[0]:
+        st.metric("🌡️ Avg Temperature", f"{metrics['avg_temperature']}°C")
+    with cols[1]:
+        st.metric("🌧️ Total Precipitation", f"{metrics['total_precipitation']:,.0f} mm")
+    with cols[2]:
+        st.metric("💨 Avg Wind Speed", f"{metrics['avg_wind_speed']} km/h")
+    with cols[3]:
+        st.metric("☀️ Avg Sunshine", f"{metrics['avg_sunshine']} hrs")
+    with cols[4]:
+        st.metric("🌧️ Rain Days", f"{int(metrics['rain_days'])}")
 
     st.divider()
 
-    # Main content - Two tiles
+    # ── Two Dashboard Tiles ──
     col1, col2 = st.columns(2)
 
-    # Tile 1: Categorical Distribution (Payment Types)
+    # Tile 1: Temperature by City (Categorical Distribution)
     with col1:
-        st.subheader("💳 Payment Type Distribution")
+        st.subheader("🌡️ Temperature by City")
+        fig1 = plot_temperature_by_city(selected_year)
+        st.plotly_chart(fig1, use_container_width=True)
 
-        if selected_taxi_type == 'Both':
-            query = """
-                SELECT
-                    payment_type_name,
-                    SUM(trip_count) AS trip_count,
-                    SUM(trip_count) * 100.0 / SUM(SUM(trip_count)) OVER () AS percentage
-                FROM analytics.trips_payment_type
-                WHERE trip_year = ?
-                GROUP BY payment_type_name
-                ORDER BY trip_count DESC
+        with st.expander("View Data"):
+            query = f"""
+                SELECT city_name, avg_temperature_c, min_temperature_c,
+                       max_temperature_c, total_precipitation_mm, rainy_days,
+                       avg_sunshine_hours
+                FROM analytics.weather_by_city
+                WHERE observation_year = {selected_year}
+                ORDER BY avg_temperature_c DESC
             """
-            params = [selected_year]
-        else:
-            query = """
-                SELECT
-                    payment_type_name,
-                    trip_count,
-                    percentage
-                FROM analytics.trips_payment_type
-                WHERE trip_year = ?
-                    AND taxi_type = ?
-                ORDER BY trip_count DESC
-            """
-            params = [selected_year, selected_taxi_type]
+            st.dataframe(query_data(query), hide_index=True)
 
-        payment_df = query_data(query, params)
-
-        if not payment_df.empty:
-            fig_payment = plot_payment_distribution(
-                payment_df,
-                selected_year,
-                selected_taxi_type
-            )
-            st.plotly_chart(fig_payment, use_container_width=True)
-
-            # Table view
-            with st.expander("View Data"):
-                st.dataframe(
-                    payment_df,
-                    column_config={
-                        'trip_count': st.column_config.NumberColumn(
-                            format='%,d'
-                        ),
-                        'percentage': st.column_config.NumberColumn(
-                            format='%.2f%%'
-                        )
-                    },
-                    hide_index=True
-                )
-        else:
-            st.warning("No payment type data available.")
-
-    # Tile 2: Temporal Distribution (Hourly Patterns)
+    # Tile 2: Monthly Precipitation Trends (Temporal Distribution)
     with col2:
-        st.subheader("⏰ Hourly Trip Patterns")
+        st.subheader("🌧️ Monthly Precipitation Trends")
+        fig2 = plot_monthly_precipitation(selected_year, selected_city)
+        st.plotly_chart(fig2, use_container_width=True)
 
-        if selected_taxi_type == 'Both':
-            query = """
-                SELECT
-                    trip_hour,
-                    SUM(trip_count) AS trip_count,
-                    AVG(
-                        CASE WHEN avg_fare_amount > 0 THEN avg_fare_amount END
-                    ) AS avg_fare_amount,
-                    AVG(
-                        CASE WHEN avg_trip_distance > 0 THEN avg_trip_distance END
-                    ) AS avg_trip_distance
-                FROM analytics.trips_by_hour
-                WHERE trip_year = ?
-                GROUP BY trip_hour
-                ORDER BY trip_hour
-            """
-            hourly_params = [selected_year]
-        else:
-            query = """
-                SELECT
-                    trip_hour,
-                    trip_count,
-                    avg_fare_amount,
-                    avg_trip_distance
-                FROM analytics.trips_by_hour
-                WHERE trip_year = ?
-                    AND taxi_type = ?
-                ORDER BY trip_hour
-            """
-            hourly_params = [selected_year, selected_taxi_type]
-
-        hourly_df = query_data(query, hourly_params)
-
-        if not hourly_df.empty:
-            fig_hourly = plot_hourly_patterns(
-                hourly_df,
-                selected_year,
-                selected_taxi_type
+        with st.expander("View Data"):
+            city_filter = (
+                "" if selected_city == "All" else f"AND city_name = '{selected_city}'"
             )
-            st.plotly_chart(fig_hourly, use_container_width=True)
-
-            # Table view
-            with st.expander("View Data"):
-                st.dataframe(
-                    hourly_df,
-                    column_config={
-                        'trip_count': st.column_config.NumberColumn(format='%,d'),
-                        'avg_fare_amount': st.column_config.NumberColumn('$%.2f'),
-                        'avg_trip_distance': st.column_config.NumberColumn('%.2f mi')
-                    },
-                    hide_index=True
-                )
-        else:
-            st.warning("No hourly pattern data available.")
+            query = f"""
+                SELECT city_name, observation_month, total_precipitation_mm,
+                       avg_temperature_c, rainy_days
+                FROM analytics.weather_monthly_trends
+                WHERE observation_year = {selected_year}
+                    {city_filter}
+                ORDER BY city_name, observation_month
+            """
+            st.dataframe(query_data(query), hide_index=True)
 
     st.divider()
 
     # Footer
-    st.caption("""
-    NYC Taxi Analytics Dashboard - Capstone Project 2026
-    Data Source: NYC Taxi & Limousine Commission
-    Built with Streamlit, DuckDB, and Plotly
-    """)
+    st.caption(
+        """
+    Indonesia Weather Analytics Dashboard - Data Engineering Capstone Project 2026
+    Data Source: Open-Meteo Historical Weather API (free, no authentication required)
+    Built with Streamlit, DuckDB/BigQuery, dbt, and Plotly
+    """
+    )
 
 
 if __name__ == "__main__":

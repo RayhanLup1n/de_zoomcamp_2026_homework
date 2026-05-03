@@ -1,40 +1,40 @@
 services:
   # ──────────────────────────────────────────────────────
-  # Ingestion Service (manual-only via profile)
-  # Run with: docker compose --profile ingest up ingestion
+  # Ingestion Service (run-once via profile)
+  # Usage: docker compose --profile ingest up ingestion
+  # Fetches weather data from Open-Meteo API → DuckDB/BigQuery
   # ──────────────────────────────────────────────────────
   ingestion:
     build:
       context: .
       dockerfile: docker/Dockerfile.ingestion
-    container_name: capstone-ingestion
+    container_name: weather-ingestion
     profiles:
       - ingest
     volumes:
       - ./ingestion:/app/ingestion
       - ./data:/data
-      - ./de-zoomcamp-2026-484615-35de71278b22.json:/app/de-zoomcamp-2026-484615-35de71278b22.json
+      - ${GOOGLE_APPLICATION_CREDENTIALS:-/dev/null}:${GOOGLE_APPLICATION_CREDENTIALS:-/tmp/no-creds.json}:ro
     environment:
       - DUCKDB_PATH=/data/capstone.duckdb
-      - YEARS=${YEARS:-2024,2025}
-      - TAXI_TYPES=${TAXI_TYPES:-green,yellow}
-      - TEST_MODE=${TEST_MODE:-false}
-      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS}
-      - GCP_PROJECT_ID=${GCP_PROJECT_ID}
-      - GCS_BUCKET_NAME=${GCS_BUCKET_NAME}
+      - START_DATE=${START_DATE:-2020-01-01}
+      - END_DATE=${END_DATE:-2025-12-31}
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-}
+      - GCS_BUCKET_NAME=${GCS_BUCKET_NAME:-}
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-}
     deploy:
       resources:
         limits:
-          memory: 4G
+          memory: 2G
     networks:
-      - capstone-network
+      - weather-network
 
   # ──────────────────────────────────────────────────────
   # PostgreSQL - Backend for Kestra
   # ──────────────────────────────────────────────────────
   postgres:
     image: postgres:15-alpine
-    container_name: capstone-postgres
+    container_name: weather-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: kestra
@@ -48,15 +48,15 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - capstone-network
+      - weather-network
 
   # ──────────────────────────────────────────────────────
-  # Orchestration - Kestra
-  # Depends on: postgres (healthy)
+  # Kestra - Workflow Orchestration
+  # UI available at http://localhost:8080
   # ──────────────────────────────────────────────────────
   kestra:
     image: kestra/kestra:latest
-    container_name: capstone-kestra
+    container_name: weather-kestra
     restart: unless-stopped
     entrypoint: /bin/bash
     command:
@@ -90,55 +90,55 @@ services:
       postgres:
         condition: service_healthy
     networks:
-      - capstone-network
+      - weather-network
 
   # ──────────────────────────────────────────────────────
-  # Transformation - dbt (manual-only via profile)
-  # Run with: docker compose --profile transform up dbt
+  # dbt - Transformation (run-once via profile)
+  # Usage: docker compose --profile transform run dbt dbt run ...
   # ──────────────────────────────────────────────────────
   dbt:
     build:
       context: .
       dockerfile: docker/Dockerfile.dbt
-    container_name: capstone-dbt
+    container_name: weather-dbt
     profiles:
       - transform
     volumes:
       - ./dbt:/app/dbt
       - ./data:/data
-      - ./de-zoomcamp-2026-484615-35de71278b22.json:/app/de-zoomcamp-2026-484615-35de71278b22.json
+      - ${GOOGLE_APPLICATION_CREDENTIALS:-/dev/null}:${GOOGLE_APPLICATION_CREDENTIALS:-/tmp/no-creds.json}:ro
     environment:
       - DUCKDB_PATH=/data/capstone.duckdb
-      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS}
-      - GCP_PROJECT_ID=${GCP_PROJECT_ID}
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-}
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-}
     networks:
-      - capstone-network
+      - weather-network
 
   # ──────────────────────────────────────────────────────
   # Dashboard - Streamlit
-  # Starts by default (reads from existing DuckDB)
+  # Available at http://localhost:8501
   # ──────────────────────────────────────────────────────
   dashboard:
     build:
       context: .
       dockerfile: docker/Dockerfile.dashboard
-    container_name: capstone-dashboard
+    container_name: weather-dashboard
     restart: unless-stopped
     ports:
       - "${DASHBOARD_PORT:-8501}:8501"
     volumes:
       - ./dashboard:/app/dashboard
       - ./data:/data
-      - ${LOCAL_GCP_CREDENTIALS}:/app/de-zoomcamp-2026-484615-35de71278b22.json
+      - ${GOOGLE_APPLICATION_CREDENTIALS:-/dev/null}:${GOOGLE_APPLICATION_CREDENTIALS:-/tmp/no-creds.json}:ro
     environment:
       - DUCKDB_PATH=/data/capstone.duckdb
-      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS}
-      - GCP_PROJECT_ID=${GCP_PROJECT_ID}
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-}
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-}
     networks:
-      - capstone-network
+      - weather-network
 
 networks:
-  capstone-network:
+  weather-network:
     driver: bridge
 
 volumes:

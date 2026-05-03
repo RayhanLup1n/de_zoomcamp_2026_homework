@@ -1,115 +1,117 @@
 """
-NYC Taxi Data Source for dlt
+Indonesia Weather Data Source for dlt
 
-All taxi trip data (green & yellow, all months/years) is loaded into
-a SINGLE table called `trips_resource` in the `raw` schema.
-Metadata columns (_ingest_year, _ingest_month, _ingest_taxi_type)
-allow downstream dbt models to filter by taxi type and time period.
+Fetches daily historical weather data for 5 major Indonesian cities
+from the Open-Meteo Archive API. No API key required.
 
-Performance: yields pyarrow Tables directly instead of per-row dicts.
-This lets dlt skip the slow normalize phase and load data much faster.
+Cities: Jakarta, Surabaya, Denpasar (Bali), Medan, Makassar
+Data range: Configurable (default: 2020-2025)
+Resolution: Daily aggregations
+
+API Docs: https://open-meteo.com/en/docs/historical-weather-api
 """
 
 import dlt
 import logging
-import os
+import requests
 
 logger = logging.getLogger(__name__)
 
-# Fix for pyarrow timezone issues on Windows (only if running locally on Windows)
-if os.name == 'nt':
-    try:
-        import tzdata
-        import pyarrow as pa
-        # Arrow on Windows looks for tzdata. We'll try to let it find it naturally first
-        # or skip if it causes OSError
-        os.environ['PYARROW_IGNORE_TZDATA_PATH'] = '0'
-    except ImportError:
-        pass
-    except Exception as e:
-        logger.warning(f"PyArrow TZ initialization warning: {e}")
+# Indonesian cities with their coordinates
+CITIES = {
+    "Jakarta": {"latitude": -6.21, "longitude": 106.85},
+    "Surabaya": {"latitude": -7.25, "longitude": 112.75},
+    "Denpasar": {"latitude": -8.65, "longitude": 115.22},
+    "Medan": {"latitude": 3.59, "longitude": 98.67},
+    "Makassar": {"latitude": -5.14, "longitude": 119.42},
+}
 
-# Base URL for NYC taxi trip data (Parquet format)
-NYC_TLC_BASE_URL = "https://d37ci6vzurychx.cloudfront.net/trip-data"
+# Open-Meteo Historical Weather API (free, no authentication)
+OPEN_METEO_BASE_URL = "https://archive-api.open-meteo.com/v1/archive"
+
+# Daily weather variables to fetch
+DAILY_VARIABLES = [
+    "temperature_2m_max",
+    "temperature_2m_min",
+    "temperature_2m_mean",
+    "precipitation_sum",
+    "rain_sum",
+    "windspeed_10m_max",
+    "sunshine_duration",
+    "weathercode",
+]
 
 
-@dlt.source(name="nyc_taxi")
-def nyc_taxi_source(years=None, taxi_types=None):
-    """NYC Taxi data source.
+@dlt.source(name="indonesia_weather")
+def weather_source(start_date="2020-01-01", end_date="2025-12-31"):
+    """Indonesia weather data source.
 
-    Yields a single resource that contains ALL trip data.
-    Each row is tagged with metadata for filtering.
+    Fetches daily weather data for all configured Indonesian cities
+    from the Open-Meteo Archive API. Free, no API key required.
     """
-    if years is None:
-        years = [2024]
-    if taxi_types is None:
-        taxi_types = ["green"]
-
-    yield trips_resource(years=years, taxi_types=taxi_types)
+    yield daily_weather_resource(start_date=start_date, end_date=end_date)
 
 
 @dlt.resource(
-    name="trips_resource",
-    write_disposition="append",
+    name="daily_weather",
+    write_disposition="replace",
 )
-def trips_resource(years, taxi_types):
-    """Load all taxi trip data into a single resource.
+def daily_weather_resource(start_date, end_date):
+    """Fetch daily weather data for all Indonesian cities.
 
-    Iterates over all year/month/taxi_type combinations and yields
-    pyarrow Tables directly. This is MUCH faster than per-row yield
-    because dlt can skip the normalize phase entirely.
+    Iterates over each city and yields one row per city per day.
+    Total rows: ~11,000 (5 cities x ~2,190 days for 6 years).
+
+    Data is fetched from Open-Meteo's free historical weather API.
+    No authentication or API key is required.
     """
-    import requests
-    import io
-    import pyarrow as pa
-    import pyarrow.parquet as pq
+    for city_name, coords in CITIES.items():
+        logger.info(f"Fetching weather data for {city_name}...")
 
-    for year in years:
-        for taxi_type in taxi_types:
-            for month in range(1, 13):  # Full year: 12 months
-                filename = f"{taxi_type}_tripdata_{year}-{month:02d}.parquet"
-                url = f"{NYC_TLC_BASE_URL}/{filename}"
+        params = {
+            "latitude": coords["latitude"],
+            "longitude": coords["longitude"],
+            "start_date": start_date,
+            "end_date": end_date,
+            "daily": ",".join(DAILY_VARIABLES),
+            "timezone": "Asia/Jakarta",
+        }
 
-                try:
-                    logger.info(f"Downloading {filename}...")
-                    response = requests.get(url, stream=True, timeout=120)
-                    response.raise_for_status()
+        try:
+            response = requests.get(
+                OPEN_METEO_BASE_URL,
+                params=params,
+                timeout=120,
+            )
+            response.raise_for_status()
+            data = response.json()
 
-                    # Read parquet from bytes
-                    buffer = io.BytesIO(response.content)
-                    table = pq.read_table(buffer)
+            daily = data["daily"]
+            dates = daily["time"]
 
-                    num_rows = table.num_rows
+            rows_count = 0
+            for i, date in enumerate(dates):
+                yield {
+                    "city_name": city_name,
+                    "latitude": coords["latitude"],
+                    "longitude": coords["longitude"],
+                    "observation_date": date,
+                    "temperature_2m_max": daily["temperature_2m_max"][i],
+                    "temperature_2m_min": daily["temperature_2m_min"][i],
+                    "temperature_2m_mean": daily["temperature_2m_mean"][i],
+                    "precipitation_sum": daily["precipitation_sum"][i],
+                    "rain_sum": daily["rain_sum"][i],
+                    "windspeed_10m_max": daily["windspeed_10m_max"][i],
+                    "sunshine_duration": daily["sunshine_duration"][i],
+                    "weather_code": daily["weathercode"][i],
+                }
+                rows_count += 1
 
-                    # Add metadata columns as new arrow columns
-                    table = table.append_column(
-                        "_ingest_year",
-                        pa.array([year] * num_rows, type=pa.int32())
-                    )
-                    table = table.append_column(
-                        "_ingest_month",
-                        pa.array([month] * num_rows, type=pa.int32())
-                    )
-                    table = table.append_column(
-                        "_ingest_taxi_type",
-                        pa.array([taxi_type] * num_rows, type=pa.string())
-                    )
-                    table = table.append_column(
-                        "_ingest_file",
-                        pa.array([filename] * num_rows, type=pa.string())
-                    )
+            logger.info(f"  OK {city_name}: {rows_count:,} days fetched")
 
-                    # Yield the entire pyarrow Table at once
-                    # dlt handles arrow tables natively — no normalize needed
-                    yield table
-
-                    logger.info(f"Loaded {num_rows:,} rows from {filename}")
-
-                except requests.exceptions.HTTPError as e:
-                    # Some months may not exist yet (e.g., future months)
-                    if e.response.status_code == 404:
-                        logger.warning(f"File not found (skipping): {filename}")
-                    else:
-                        logger.error(f"HTTP error for {filename}: {e}")
-                except Exception as e:
-                    logger.warning(f"Could not load {filename}: {e}")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"  FAIL {city_name}: network error - {e}")
+        except KeyError as e:
+            logger.error(f"  FAIL {city_name}: unexpected API response - missing key {e}")
+        except Exception as e:
+            logger.error(f"  FAIL {city_name}: {e}")

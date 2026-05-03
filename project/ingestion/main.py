@@ -1,8 +1,19 @@
 """
-NYC Taxi Ingestion Main Script
+Indonesia Weather Ingestion Main Script
 
-This script runs the dlt pipeline to ingest NYC taxi data
-into DuckDB database.
+Runs the dlt pipeline to ingest weather data from Open-Meteo API
+into DuckDB (local) or BigQuery (cloud).
+
+Usage:
+    python -m ingestion.main
+
+Environment Variables:
+    DUCKDB_PATH          - Path to DuckDB file (default: ./data/capstone.duckdb)
+    START_DATE           - Start date for data fetch (default: 2020-01-01)
+    END_DATE             - End date for data fetch (default: 2025-12-31)
+    GCP_PROJECT_ID       - GCP project ID (enables BigQuery mode)
+    GCS_BUCKET_NAME      - GCS bucket for staging (optional, speeds up BigQuery loads)
+    GOOGLE_APPLICATION_CREDENTIALS - Path to GCP service account JSON
 """
 
 import os
@@ -12,78 +23,70 @@ import dlt
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
 # Import source
-from ingestion.source import nyc_taxi_source
-
-
-def get_env_list(env_var, default=None):
-    """Parse environment variable into list."""
-    if env_var not in os.environ:
-        return default if default is not None else []
-
-    value = os.environ[env_var]
-    return [item.strip() for item in value.split(",")]
+from ingestion.source import weather_source
 
 
 def main():
     """Main entry point for ingestion pipeline."""
-    # Get configuration from environment
+    # Configuration from environment
     duckdb_path = os.environ.get("DUCKDB_PATH", "./data/capstone.duckdb")
     project_id = os.environ.get("GCP_PROJECT_ID")
     bucket_name = os.environ.get("GCS_BUCKET_NAME")
-    # Check both potential variables for credential path
-    credentials_path = os.environ.get("LOCAL_GCP_CREDENTIALS") or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+    credentials_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
 
-    # Determine destination
-    logger.debug(f"Checking for GCP config: Project={project_id}, Path={credentials_path}")
+    start_date = os.environ.get("START_DATE", "2020-01-01")
+    end_date = os.environ.get("END_DATE", "2025-12-31")
+
+    # Determine destination: BigQuery (cloud) or DuckDB (local)
     if project_id and credentials_path and os.path.exists(credentials_path):
-        logger.info("Destination set to BIGQUERY (using Project: %s)", project_id)
-        
-        # Load credentials from JSON file explicitly
+        logger.info("Destination: BIGQUERY (Project: %s)", project_id)
+
         import json
-        with open(credentials_path, 'r') as f:
+
+        with open(credentials_path, "r") as f:
             credentials_dict = json.load(f)
-            
+
         destination = dlt.destinations.bigquery(
             credentials=credentials_dict,
-            location="US"
+            location="US",
         )
-        # Use GCS as staging for faster loads to BigQuery
+
+        # Use GCS staging for faster BigQuery loads
         if bucket_name:
             staging = dlt.destinations.filesystem(
                 f"gs://{bucket_name}",
-                credentials=credentials_dict
+                credentials=credentials_dict,
             )
-            logger.info("Using GCS STAGING: gs://%s", bucket_name)
+            logger.info("Staging: GCS gs://%s", bucket_name)
         else:
             staging = None
-            logger.warning("No GCS_BUCKET_NAME found. Using direct BigQuery load (slower).")
+            logger.warning("No GCS_BUCKET_NAME set. Using direct BigQuery load.")
     else:
-        logger.info("Destination set to DUCKDB")
+        logger.info("Destination: DUCKDB (%s)", duckdb_path)
+
+        # Ensure data directory exists
+        os.makedirs(os.path.dirname(duckdb_path) or ".", exist_ok=True)
+
         destination = dlt.destinations.duckdb(credentials=duckdb_path)
         staging = None
 
-    # Convert string years to integers
-    years_str = os.environ.get("YEARS", "2024")
-    years = [int(y.strip()) for y in years_str.split(",")]
-
-    taxi_types = get_env_list("TAXI_TYPES", ["green"])
-
     logger.info("=" * 60)
-    logger.info("NYC Taxi Ingestion Pipeline")
+    logger.info("Indonesia Weather Ingestion Pipeline")
     logger.info("=" * 60)
-    logger.info("Years: %s", years)
-    logger.info("Taxi Types: %s", taxi_types)
+    logger.info("Date range: %s to %s", start_date, end_date)
+    logger.info("Cities: Jakarta, Surabaya, Denpasar, Medan, Makassar")
 
-    source = nyc_taxi_source(years=years, taxi_types=taxi_types)
+    # Create source
+    source = weather_source(start_date=start_date, end_date=end_date)
 
     # Initialize dlt pipeline
     pipeline = dlt.pipeline(
-        pipeline_name="nyc_taxi_ingestion",
+        pipeline_name="indonesia_weather",
         destination=destination,
         staging=staging,
         dataset_name="raw",
@@ -100,7 +103,7 @@ def main():
     logger.info("=" * 60)
     logger.info("Ingestion Complete!")
     logger.info("=" * 60)
-    logger.info("")
+    logger.info(str(load_info))
     print("Success! Ingestion completed.")
 
 
