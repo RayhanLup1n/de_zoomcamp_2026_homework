@@ -21,22 +21,20 @@ cleaned AS (
         CAST(observation_date AS DATE) AS observation_date,
 
         -- Temperature metrics (Celsius)
-        ROUND(CAST(temperature_2m_max AS DOUBLE), 1) AS temperature_max_c,
-        ROUND(CAST(temperature_2m_min AS DOUBLE), 1) AS temperature_min_c,
-        ROUND(CAST(temperature_2m_mean AS DOUBLE), 1) AS temperature_mean_c,
-        ROUND(
-            CAST(temperature_2m_max AS DOUBLE) - CAST(temperature_2m_min AS DOUBLE), 1
-        ) AS temperature_range_c,
+        ROUND(temperature_2m_max * 1.0, 1) AS temperature_max_c,
+        ROUND(temperature_2m_min * 1.0, 1) AS temperature_min_c,
+        ROUND(temperature_2m_mean * 1.0, 1) AS temperature_mean_c,
+        ROUND((temperature_2m_max - temperature_2m_min) * 1.0, 1) AS temperature_range_c,
 
         -- Precipitation metrics (millimeters)
-        ROUND(COALESCE(CAST(precipitation_sum AS DOUBLE), 0), 1) AS precipitation_mm,
-        ROUND(COALESCE(CAST(rain_sum AS DOUBLE), 0), 1) AS rain_mm,
+        ROUND(COALESCE(precipitation_sum, 0) * 1.0, 1) AS precipitation_mm,
+        ROUND(COALESCE(rain_sum, 0) * 1.0, 1) AS rain_mm,
 
         -- Wind speed (km/h)
-        ROUND(COALESCE(CAST(windspeed_10m_max AS DOUBLE), 0), 1) AS wind_speed_max_kmh,
+        ROUND(COALESCE(windspeed_10m_max, 0) * 1.0, 1) AS wind_speed_max_kmh,
 
         -- Sunshine duration (convert from seconds to hours)
-        ROUND(COALESCE(CAST(sunshine_duration AS DOUBLE), 0) / 3600.0, 1) AS sunshine_hours,
+        ROUND(COALESCE(sunshine_duration, 0) / 3600.0, 1) AS sunshine_hours,
 
         -- WMO Weather code
         CAST(weather_code AS INTEGER) AS weather_code,
@@ -84,7 +82,7 @@ cleaned AS (
 
         -- Rainy day flag (precipitation > 0.1mm threshold)
         CASE
-            WHEN COALESCE(CAST(precipitation_sum AS DOUBLE), 0) > 0.1 THEN TRUE
+            WHEN COALESCE(precipitation_sum, 0) > 0.1 THEN TRUE
             ELSE FALSE
         END AS is_rainy_day
 
@@ -96,6 +94,6 @@ cleaned AS (
 
 SELECT
     -- Generate unique weather observation ID
-    CONCAT(city_name, '-', CAST(observation_date AS VARCHAR)) AS weather_id,
+    city_name || '-' || CAST(observation_date AS {{ 'STRING' if target.type == 'bigquery' else 'VARCHAR' }}) AS weather_id,
     *
 FROM cleaned
