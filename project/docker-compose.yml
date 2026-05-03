@@ -14,7 +14,6 @@ services:
     volumes:
       - ./ingestion:/app/ingestion
       - ./data:/data
-      - ${GOOGLE_APPLICATION_CREDENTIALS:-/dev/null}:${GOOGLE_APPLICATION_CREDENTIALS:-/tmp/no-creds.json}:ro
     environment:
       - DUCKDB_PATH=/data/capstone.duckdb
       - START_DATE=${START_DATE:-2020-01-01}
@@ -106,7 +105,6 @@ services:
     volumes:
       - ./dbt:/app/dbt
       - ./data:/data
-      - ${GOOGLE_APPLICATION_CREDENTIALS:-/dev/null}:${GOOGLE_APPLICATION_CREDENTIALS:-/tmp/no-creds.json}:ro
     environment:
       - DUCKDB_PATH=/data/capstone.duckdb
       - GCP_PROJECT_ID=${GCP_PROJECT_ID:-}
@@ -129,7 +127,6 @@ services:
     volumes:
       - ./dashboard:/app/dashboard
       - ./data:/data
-      - ${GOOGLE_APPLICATION_CREDENTIALS:-/dev/null}:${GOOGLE_APPLICATION_CREDENTIALS:-/tmp/no-creds.json}:ro
     environment:
       - DUCKDB_PATH=/data/capstone.duckdb
       - GCP_PROJECT_ID=${GCP_PROJECT_ID:-}
